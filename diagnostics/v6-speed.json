@@ -1,0 +1,16 @@
+{
+  "v5_training_batch_seconds": 0.17794230002133796,
+  "v6_training_batch_seconds": 0.1808408333454281,
+  "v6_validation_forward_batch_seconds": 0.0761198999825865,
+  "validation_1_candidates_4_windows_seconds": 0.049435599939897656,
+  "validation_65_candidates_4_windows_seconds": 2.0142507000127807,
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "torch_threads": 10,
+  "audio_load_4_windows_seconds": 0.05527630005963147,
+  "training_batch_size": 4,
+  "training_windows_v5": 736,
+  "training_windows_v6": 1312,
+  "validation_windows": 256,
+  "note": "Short isolated benchmark; CUDA synchronized. Per-epoch estimates omit I/O variability and changing note density."
+}

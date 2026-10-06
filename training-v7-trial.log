@@ -1,0 +1,10 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+Transferred complete recognizer from checkpoints/piano-v6.pt; optimizer and epoch start fresh
+Training onsets-multires-balanced (1,443,119 parameters) on 41 recordings; validating on 16; device=cpu; selection=note_macro_f03; early_stopping_patience=20; augmentation=False
+Learning 3 global thresholds on training targets
+Bass-focused window fraction=0.30; 18874 training bass strikes indexed; validation sampling unchanged
+Treble-focused window fraction=0.30; 12706 training treble strikes indexed; validation sampling unchanged
+Bass/treble error weight=2; threshold objective=smooth per-pitch mean(F0,F3); validation uses decoded notes
+Saved starting model for comparison: note_macro_f03=0.3798; best checkpoint will change only on validation improvement
+epoch=1 train_loss=0.8913 val_loss=0.0921 val_f1=0.5135 onset_f1=0.7287 note_f1=0.4272 note_f_avg=0.4168 stale_epochs=1 note_macro_f1=0.3568 covered_pitches=63/88 note_macro_f0=0.4249 note_macro_f3=0.3331 note_macro_f03=0.3790 precision=0.5278 recall=0.4999 frame=0.793090 onset=0.792833 offset=0.792956 lr=0.0001 calibration=parameters threshold_sets=1 train_s=9.3 val_s=0.8
+Latest training state: checkpoints\piano-v7-trial.last.pt

@@ -1,0 +1,29 @@
+{
+  "split_counts": {
+    "validation": 16,
+    "test": 4,
+    "train": 23
+  },
+  "new_pairs": 12,
+  "added_bytes": 843370916,
+  "total_bytes": 1895357215,
+  "validation_minutes": 88.26762406967167,
+  "validation_composers": {
+    "Alexander Scriabin": 1,
+    "Felix Mendelssohn": 1,
+    "Franz Liszt": 1,
+    "Franz Liszt / Vladimir Horowitz": 1,
+    "Franz Schubert": 1,
+    "Franz Schubert / Franz Liszt": 1,
+    "Fr\u00e9d\u00e9ric Chopin": 1,
+    "Johann Sebastian Bach": 2,
+    "Johannes Brahms": 1,
+    "Joseph Haydn": 1,
+    "Ludwig van Beethoven": 1,
+    "Mily Balakirev": 1,
+    "Robert Schumann": 1,
+    "Sergei Rachmaninoff": 2
+  },
+  "all_new_files_crc_verified": true,
+  "all_pairs_readable": true
+}

@@ -1,0 +1,38 @@
+{
+  "architecture": "onsets-fourier-recurrent",
+  "fan_layers": 3,
+  "parameters": 10012924,
+  "component_parameters": {
+    "short_mel": 0,
+    "long_mel": 0,
+    "short_encoder": 885216,
+    "long_encoder": 885216,
+    "fusion": 222144,
+    "fourier": 6419328,
+    "temporal": 1331712,
+    "sequence_norm": 768,
+    "onset_head": 33880,
+    "frame_head": 41624,
+    "offset_head": 33880,
+    "velocity_head": 33880,
+    "pedal_head": 385,
+    "offset_refinement": 124888,
+    "threshold_module": 3
+  },
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "batch_size": 4,
+  "audio_seconds": 4,
+  "frames": 201,
+  "forward_backward_optimizer_seconds": 3.3440608999226242,
+  "peak_allocated_mib": 473.00927734375,
+  "peak_reserved_mib": 560.0,
+  "loss": 3.383624792098999,
+  "gradients_finite": true,
+  "learned_thresholds": {
+    "frame": 0.6049854755401611,
+    "onset": 0.4782854914665222,
+    "offset": 0.418986439704895
+  },
+  "note": "One synthetic batch verifies execution and memory; it does not measure transcription accuracy."
+}

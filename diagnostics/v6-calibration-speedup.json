@@ -1,0 +1,17 @@
+{
+  "previous_full_seconds": 2.3182635999983177,
+  "cached_full_seconds": 0.36357210006099194,
+  "cached_current_seconds": 0.02419129991903901,
+  "windows": 4,
+  "candidates": 65,
+  "full_grid_speedup": 6.376351759690613,
+  "metrics_identical": true,
+  "selected_thresholds": {
+    "frame": 0.5,
+    "onset": 0.5,
+    "offset": 0.8
+  },
+  "note": "Minimum of three runs on the same cached model probabilities; decoding and metric matching only, excludes inference and data loading.",
+  "periodic_average_seconds": 0.0920674599474296,
+  "periodic_average_speedup": 25.18005385748714
+}

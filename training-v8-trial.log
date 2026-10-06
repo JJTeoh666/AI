@@ -1,0 +1,10 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+Fresh random initialization; seed=20261006; starting at epoch 1
+Training onsets-fourier-recurrent (10,012,924 parameters) on 41 recordings; validating on 16; device=cpu; selection=note_macro_f0123; early_stopping_patience=20; augmentation=False
+Learning 3 global thresholds on training targets
+Bass-focused window fraction=0.30; 18874 training bass strikes indexed; validation sampling unchanged
+Treble-focused window fraction=0.30; 12706 training treble strikes indexed; validation sampling unchanged
+Bass/treble error weight=2; threshold objective=smooth per-pitch mean(F0,F1,F2,F3); validation uses decoded notes
+epoch=1 train_loss=2.8875 val_loss=0.4607 val_f1=0.0752 onset_f1=0.0252 note_f1=0.0018 note_f_avg=0.0017 stale_epochs=0 note_macro_f1=0.0002 covered_pitches=63/88 note_macro_f0=0.0001 note_macro_f3=0.0005 note_macro_f03=0.0003 note_macro_f2=0.0004 note_macro_f0123=0.0003 precision=0.0412 recall=0.4263 frame=0.453970 onset=0.379529 offset=0.441340 lr=0.0003 calibration=parameters threshold_sets=1 train_s=14.1 val_s=2.3
+Saved best model: checkpoints\piano-v8-trial.pt
+Latest training state: checkpoints\piano-v8-trial.last.pt

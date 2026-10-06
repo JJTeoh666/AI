@@ -1,0 +1,24 @@
+{
+  "piano": {
+    "name": "Salamander Grand Piano V3+20200602",
+    "author": "Alexander Holm",
+    "instrument": "Yamaha C5",
+    "source": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+    "download": "https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPiano-SF2-V3+20200602.tar.xz",
+    "license": "CC BY 3.0",
+    "license_url": "https://creativecommons.org/licenses/by/3.0/",
+    "conversion": "FreePats SoundFont conversion by roberto@zenvoid.org; see included source documentation.",
+    "archive_sha256": "15edb061d7ba60d58332f72dba8f8ce40988048cc703f935e6320f37d650e213",
+    "file": "assets\\piano\\SalamanderGrandPiano.sf2",
+    "bytes": 1266462334,
+    "sha256": "712d0e681efbe5203a8014e9b3e84168f1908c82f2f6fb13bd2c77d6d72c70b7"
+  },
+  "runtime": {
+    "name": "FluidSynth",
+    "version": "2.6.1",
+    "source": "https://github.com/FluidSynth/fluidsynth/releases/tag/v2.6.1",
+    "download": "https://github.com/FluidSynth/fluidsynth/releases/download/v2.6.1/fluidsynth-v2.6.1-win10-x64-cpp11.zip",
+    "sha256": "fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c",
+    "license": "LGPL-2.1-or-later"
+  }
+}

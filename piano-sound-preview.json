@@ -1,0 +1,24 @@
+{
+  "duration": 8.0,
+  "notes": [
+    {"pitch": 48, "start": 0.25, "end": 1.0, "velocity": 72},
+    {"pitch": 60, "start": 0.25, "end": 0.65, "velocity": 64},
+    {"pitch": 64, "start": 0.75, "end": 1.15, "velocity": 74},
+    {"pitch": 67, "start": 1.25, "end": 1.65, "velocity": 84},
+    {"pitch": 72, "start": 1.75, "end": 2.2, "velocity": 96},
+    {"pitch": 71, "start": 2.25, "end": 2.65, "velocity": 88},
+    {"pitch": 69, "start": 2.75, "end": 3.15, "velocity": 80},
+    {"pitch": 67, "start": 3.25, "end": 3.65, "velocity": 74},
+    {"pitch": 64, "start": 3.75, "end": 4.15, "velocity": 68},
+    {"pitch": 48, "start": 4.5, "end": 6.8, "velocity": 90},
+    {"pitch": 60, "start": 4.5, "end": 6.8, "velocity": 82},
+    {"pitch": 64, "start": 4.5, "end": 6.8, "velocity": 82},
+    {"pitch": 67, "start": 4.5, "end": 6.8, "velocity": 82}
+  ],
+  "pedals": [
+    {"start": 0.2, "end": 2.2},
+    {"start": 2.24, "end": 4.2},
+    {"start": 4.45, "end": 7.4}
+  ],
+  "chords": [{"name": "C major", "start": 4.5, "end": 6.8}]
+}

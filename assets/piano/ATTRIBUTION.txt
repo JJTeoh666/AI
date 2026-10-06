@@ -1,0 +1,5 @@
+Salamander Grand Piano by Alexander Holm (Yamaha C5 samples).
+FreePats SoundFont conversion V3+20200602 by roberto@zenvoid.org.
+Source: https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html
+Creative Commons Attribution 3.0: https://creativecommons.org/licenses/by/3.0/
+Samples are rendered with FluidSynth; output level and room effects are set by this app.

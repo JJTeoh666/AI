@@ -1,0 +1,645 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+test_average_selection_and_twenty_epoch_stop_reset_on_improvement (test_pipeline.PipelineTest.test_average_selection_and_twenty_epoch_stop_reset_on_improvement) ... ok
+Transferred complete recognizer from C:\jj\AI\tmpc9yhcpjs\v2.pt; optimizer and epoch start fresh
+Training onsets-calibrated (369,194 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Learning 9 register thresholds on training targets
+Saved starting model for comparison: note_f_avg=0.0000; best checkpoint will change only on validation improvement
+epoch=1 train_loss=2.9564 val_loss=0.6963 val_f1=0.0239 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=1 precision=0.0121 recall=1.0000 frame=0.50 onset=0.50 offset=0.70 lr=0.001
+Latest training state: C:\jj\AI\tmpc9yhcpjs\v3.last.pt
+Restored onsets-calibrated model at epoch 1; optimizer=restored
+Training onsets-calibrated (369,194 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Learning 9 register thresholds on training targets
+epoch=2 train_loss=2.9564 val_loss=0.6963 val_f1=0.0244 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=2 precision=0.0123 recall=1.0000 frame=0.50 onset=0.50 offset=0.70 lr=0.001
+Latest training state: C:\jj\AI\tmpc9yhcpjs\v3.last.pt
+Training mode changed; starting fresh optimizer and validation comparison
+Restored onsets-calibrated model at epoch 2; optimizer=fresh
+Training onsets-calibrated (369,194 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Learning 9 register thresholds on training targets
+Saved starting model for comparison: note_f_avg=0.0000; best checkpoint will change only on validation improvement
+epoch=3 train_loss=2.9773 val_loss=0.6680 val_f1=0.0262 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=1 precision=0.0133 recall=1.0000 frame=0.50 onset=0.50 offset=0.70 lr=0.001
+Latest training state: C:\jj\AI\tmpc9yhcpjs\v3.last.pt
+test_calibrated_model_transfer_training_resume_and_model_parameter_inference (test_pipeline.PipelineTest.test_calibrated_model_transfer_training_resume_and_model_parameter_inference) ... ok
+test_calibration_mean_can_select_a_different_model_than_note_f1 (test_pipeline.PipelineTest.test_calibration_mean_can_select_a_different_model_than_note_f1) ... ok
+test_checkpoint_thresholds_and_independent_inference_override (test_pipeline.PipelineTest.test_checkpoint_thresholds_and_independent_inference_override) ... ok
+test_chunk_boundaries_do_not_duplicate_frames (test_pipeline.PipelineTest.test_chunk_boundaries_do_not_duplicate_frames) ... ok
+test_cli_defaults_to_twenty_unimproved_epochs (test_pipeline.PipelineTest.test_cli_defaults_to_twenty_unimproved_epochs) ... ok
+test_each_decoder_threshold_controls_its_own_head (test_pipeline.PipelineTest.test_each_decoder_threshold_controls_its_own_head) ... ok
+Evaluating recording 1/1: validation.wav
+{
+  "threshold": 0.6,
+  "thresholds": {
+    "frame": 0.6,
+    "onset": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "offset": [
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071,
+      0.699999988079071
+    ]
+  },
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "onset_f1": 0.0,
+  "note_f0": 0.0,
+  "note_f1": 0.0,
+  "note_f2": 0.0,
+  "note_f3": 0.0,
+  "note_f4": 0.0,
+  "note_f_avg": 0.0,
+  "note_precision": 0.0,
+  "note_recall": 0.0,
+  "threshold_curve": [
+    {
+      "threshold": 0.6,
+      "thresholds": {
+        "frame": 0.6,
+        "onset": [
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "offset": [
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071
+        ]
+      },
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "onset_f1": 0.0,
+      "note_f0": 0.0,
+      "note_f1": 0.0,
+      "note_f2": 0.0,
+      "note_f3": 0.0,
+      "note_f4": 0.0,
+      "note_f_avg": 0.0,
+      "note_precision": 0.0,
+      "note_recall": 0.0
+    }
+  ],
+  "recordings": 1,
+  "mode": "full_recordings",
+  "split": "validation",
+  "architecture": "onsets-calibrated",
+  "selection_metric": "note_f1",
+  "min_note_seconds": 0.04,
+  "onset_tolerance_seconds": 0.05,
+  "offset_tolerance": "max(0.05 seconds, 20% of reference duration)",
+  "register_thresholds": [
+    {
+      "name": "bass",
+      "low_note": 21,
+      "high_note": 47,
+      "frame": 0.6,
+      "onset": 0.5,
+      "offset": 0.699999988079071
+    },
+    {
+      "name": "middle",
+      "low_note": 48,
+      "high_note": 83,
+      "frame": 0.6000000000000001,
+      "onset": 0.5,
+      "offset": 0.699999988079071
+    },
+    {
+      "name": "treble",
+      "low_note": 84,
+      "high_note": 108,
+      "frame": 0.6,
+      "onset": 0.5,
+      "offset": 0.699999988079071
+    }
+  ],
+  "calibrated_checkpoint": "C:\\jj\\AI\\tmp5bhxxfa4\\calibrated.pt"
+test_evaluation_saves_calibration_in_model_parameters (test_pipeline.PipelineTest.test_evaluation_saves_calibration_in_model_parameters) ... ok
+test_global_thresholds_learn_and_decode_all_pitches_with_the_same_cutoffs (test_pipeline.PipelineTest.test_global_thresholds_learn_and_decode_all_pitches_with_the_same_cutoffs) ... ok
+test_independent_grid_selects_the_correct_combination (test_pipeline.PipelineTest.test_independent_grid_selects_the_correct_combination) ... ok
+}
+Transferred complete recognizer from C:\jj\AI\tmpn59w7uza\source.pt; optimizer and epoch start fresh
+Training onsets-calibrated (369,194 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Learning 9 register thresholds on training targets
+Saved starting model for comparison: note_f_avg=0.6000; best checkpoint will change only on validation improvement
+epoch=1 train_loss=2.9890 val_loss=0.1000 val_f1=0.5000 onset_f1=0.5000 note_f1=0.5000 note_f_avg=0.5000 stale_epochs=1 precision=0.5000 recall=0.5000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+epoch=2 train_loss=2.9890 val_loss=0.1000 val_f1=0.4000 onset_f1=0.4000 note_f1=0.4000 note_f_avg=0.4000 stale_epochs=2 precision=0.4000 recall=0.4000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Latest training state: C:\jj\AI\tmpn59w7uza\guarded.last.pt
+test_learned_model_keeps_starting_checkpoint_when_note_accuracy_falls (test_pipeline.PipelineTest.test_learned_model_keeps_starting_checkpoint_when_note_accuracy_falls) ... ok
+test_learned_threshold_gradient_improves_decisions_without_changing_classifier (test_pipeline.PipelineTest.test_learned_threshold_gradient_improves_decisions_without_changing_classifier) ... ok
+test_midi_alignment_and_chord (test_pipeline.PipelineTest.test_midi_alignment_and_chord) ... ok
+test_midi_velocity_pedal_and_multi_targets (test_pipeline.PipelineTest.test_midi_velocity_pedal_and_multi_targets) ... ok
+test_note_f0_to_f4_mean_and_empty_counts (test_pipeline.PipelineTest.test_note_f0_to_f4_mean_and_empty_counts) ... ok
+test_note_metrics_require_unique_matches_and_offsets (test_pipeline.PipelineTest.test_note_metrics_require_unique_matches_and_offsets) ... ok
+test_onset_decoder_repeated_notes_and_short_notes (test_pipeline.PipelineTest.test_onset_decoder_repeated_notes_and_short_notes) ... ok
+test_recurrent_convolution_preserves_initial_predictions_and_learns_feedback (test_pipeline.PipelineTest.test_recurrent_convolution_preserves_initial_predictions_and_learns_feedback) ... ok
+Transferred complete recognizer from C:\jj\AI\tmpoos4t0cg\recognizer.pt; optimizer and epoch start fresh
+Training onsets-recurrent (461,644 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Keeping learned threshold parameters fixed for this run
+Saved starting model for comparison: note_f_avg=0.0000; best checkpoint will change only on validation improvement
+epoch=1 train_loss=1.8570 val_loss=0.6162 val_f1=0.0367 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=1 precision=0.0187 recall=1.0000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Latest training state: C:\jj\AI\tmpoos4t0cg\recurrent.last.pt
+Restored onsets-recurrent model at epoch 1; optimizer=restored
+Training onsets-recurrent (461,644 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Keeping learned threshold parameters fixed for this run
+epoch=2 train_loss=1.6498 val_loss=0.5616 val_f1=0.0654 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=2 precision=0.0338 recall=1.0000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Latest training state: C:\jj\AI\tmpoos4t0cg\recurrent.last.pt
+test_recurrent_training_resume_and_frozen_thresholds (test_pipeline.PipelineTest.test_recurrent_training_resume_and_frozen_thresholds) ... ok
+test_register_thresholds_use_correct_boundary_pitches_and_preserve_overrides (test_pipeline.PipelineTest.test_register_thresholds_use_correct_boundary_pitches_and_preserve_overrides) ... ok
+test_result_playback_uses_pedal_and_velocity (test_pipeline.PipelineTest.test_result_playback_uses_pedal_and_velocity) ... ok
+Selection metric changed to f1; resetting best-score comparison and early-stopping count
+Restored frame model at epoch 7; optimizer=fresh
+Training frame (150,776 parameters) on 1 recordings; validating on 1; device=cpu; selection=f1; early_stopping_patience=20; augmentation=False
+Calibrating 6 threshold combinations on validation windows
+Saved starting model for comparison: f1=0.0177; best checkpoint will change only on validation improvement
+epoch=8 train_loss=0.7198 val_loss=0.6799 val_f1=0.0444 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=0 precision=0.0227 recall=1.0000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Saved best model: C:\jj\AI\tmpbfn499p4\continued.pt
+Latest training state: C:\jj\AI\tmpbfn499p4\continued.last.pt
+test_resume_legacy_checkpoint (test_pipeline.PipelineTest.test_resume_legacy_checkpoint) ... ok
+test_resume_old_f1_checkpoint_restarts_comparison_using_average (test_pipeline.PipelineTest.test_resume_old_f1_checkpoint_restarts_comparison_using_average) ... ok
+test_staff_positions_and_pagination (test_pipeline.PipelineTest.test_staff_positions_and_pagination) ... ok
+test_synthesized_pitch_timing_polyphony_and_cancellation (test_pipeline.PipelineTest.test_synthesized_pitch_timing_polyphony_and_cancellation) ... ok
+Fresh random initialization; seed=42; starting at epoch 1
+Training frame (150,776 parameters) on 1 recordings; validating on 1; device=cpu; selection=f1; early_stopping_patience=20; augmentation=False
+Calibrating 6 threshold combinations on validation windows
+epoch=1 train_loss=0.7938 val_loss=0.6829 val_f1=0.0417 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=0 precision=0.0213 recall=1.0000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Saved best model: C:\jj\AI\tmp8e7ttw8h\model.pt
+Latest training state: C:\jj\AI\tmp8e7ttw8h\model.last.pt
+Restored frame model at epoch 1; optimizer=restored
+Training frame (150,776 parameters) on 1 recordings; validating on 1; device=cpu; selection=f1; early_stopping_patience=20; augmentation=False
+Calibrating 6 threshold combinations on validation windows
+epoch=2 train_loss=0.5494 val_loss=0.6756 val_f1=0.0637 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=0 precision=0.0329 recall=1.0000 frame=0.50 onset=0.50 offset=0.50 lr=0.0003
+Saved best model: C:\jj\AI\tmp8e7ttw8h\model.pt
+Latest training state: C:\jj\AI\tmp8e7ttw8h\model.last.pt
+test_train_checkpoint_and_inference (test_pipeline.PipelineTest.test_train_checkpoint_and_inference) ... ok
+Wrote C:\jj\AI\tmp8e7ttw8h\prediction.json (15 notes, 0 chord spans)
+Fresh random initialization; seed=42; starting at epoch 1
+Training onsets (369,185 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Calibrating 1 threshold combinations on validation windows
+epoch=1 train_loss=1.9667 val_loss=0.6450 val_f1=0.0000 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=0 precision=0.0000 recall=0.0000 frame=0.65 onset=0.25 offset=0.40 lr=0.001
+Saved best model: C:\jj\AI\tmpthzu9ku4\independent.pt
+Latest training state: C:\jj\AI\tmpthzu9ku4\independent.last.pt
+Restored onsets model at epoch 1; optimizer=restored
+Training onsets (369,185 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=False
+Calibrating 1 threshold combinations on validation windows
+epoch=2 train_loss=1.7504 val_loss=0.6159 val_f1=0.0000 onset_f1=0.0000 note_f1=0.0000 note_f_avg=0.0000 stale_epochs=1 precision=0.0000 recall=0.0000 frame=0.65 onset=0.25 offset=0.40 lr=0.001
+Latest training state: C:\jj\AI\tmpthzu9ku4\independent.last.pt
+test_training_saves_and_resumes_independent_threshold_grid (test_pipeline.PipelineTest.test_training_saves_and_resumes_independent_threshold_grid) ... ok
+test_v2_context_keeps_note_crossing_chunk_boundary (test_pipeline.PipelineTest.test_v2_context_keeps_note_crossing_chunk_boundary) ... ok
+Transferred CNN features from C:\jj\AI\tmp7ehdjkoz\legacy.pt; optimizer and epoch start fresh
+Training onsets (369,185 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=2; augmentation=False
+Calibrating 1 threshold combinations on validation windows
+epoch=1 train_loss=1.9786 val_loss=0.1000 val_f1=0.5000 onset_f1=0.5000 note_f1=0.5000 note_f_avg=0.5000 stale_epochs=0 precision=0.5000 recall=0.5000 frame=0.50 onset=0.50 offset=0.50 lr=0.001
+Saved best model: C:\jj\AI\tmp7ehdjkoz\v2.pt
+epoch=2 train_loss=1.7625 val_loss=0.1000 val_f1=0.4000 onset_f1=0.4000 note_f1=0.4000 note_f_avg=0.4000 stale_epochs=1 precision=0.4000 recall=0.4000 frame=0.50 onset=0.50 offset=0.50 lr=0.0005
+epoch=3 train_loss=1.6902 val_loss=0.1000 val_f1=0.3000 onset_f1=0.3000 note_f1=0.3000 note_f_avg=0.3000 stale_epochs=2 precision=0.3000 recall=0.3000 frame=0.50 onset=0.50 offset=0.50 lr=0.00025
+Early stopping after 2 epochs without improvement in note_f_avg
+Latest training state: C:\jj\AI\tmp7ehdjkoz\v2.last.pt
+Restored onsets model at epoch 3; optimizer=restored
+Training onsets (369,185 parameters) on 1 recordings; validating on 1; device=cpu; selection=note_f_avg; early_stopping_patience=2; augmentation=False
+Calibrating 1 threshold combinations on validation windows
+epoch=4 train_loss=1.6569 val_loss=0.1000 val_f1=0.6000 onset_f1=0.6000 note_f1=0.6000 note_f_avg=0.6000 stale_epochs=0 precision=0.6000 recall=0.6000 frame=0.50 onset=0.50 offset=0.50 lr=0.00025
+Saved best model: C:\jj\AI\tmp7ehdjkoz\v2.pt
+Latest training state: C:\jj\AI\tmp7ehdjkoz\v2.last.pt
+Evaluating recording 1/1: validation.wav
+test_v2_transfer_training_resume_scheduler_and_calibration (test_pipeline.PipelineTest.test_v2_transfer_training_resume_scheduler_and_calibration) ... ok
+test_v5_fresh_training_resume_scalar_thresholds_and_quiet_output (test_pipeline.PipelineTest.test_v5_fresh_training_resume_scalar_thresholds_and_quiet_output) ... ok
+test_v5_initialization_is_random_and_repeatable_with_an_explicit_seed (test_pipeline.PipelineTest.test_v5_initialization_is_random_and_repeatable_with_an_explicit_seed) ... ok
+test_validation_download_expands_only_validation_and_respects_budget (test_pipeline.PipelineTest.test_validation_download_expands_only_validation_and_respects_budget) ... C:\jj\AI\tests\test_pipeline.py:582: ResourceWarning: unclosed file <_io.TextIOWrapper name='C:\\jj\\AI\\tmpvtzuyl_5\\maestro-v3.0.0.csv' mode='r' encoding='cp1252'>
+  rows = list(csv.DictReader(csv_path.open(newline="")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+{
+  "threshold": 0.35,
+  "thresholds": {
+    "frame": 0.35,
+    "onset": 0.35,
+    "offset": 0.5
+  },
+  "precision": 0.006566850538481744,
+  "recall": 1.0,
+  "f1": 0.01304801670146138,
+  "onset_f1": 0.015625,
+  "note_f0": 0.0,
+  "note_f1": 0.0,
+  "note_f2": 0.0,
+  "note_f3": 0.0,
+  "note_f4": 0.0,
+  "note_f_avg": 0.0,
+  "note_precision": 0.0,
+  "note_recall": 0.0,
+  "threshold_curve": [
+    {
+      "threshold": 0.35,
+      "thresholds": {
+        "frame": 0.35,
+        "onset": 0.35,
+        "offset": 0.5
+      },
+      "precision": 0.006566850538481744,
+      "recall": 1.0,
+      "f1": 0.01304801670146138,
+      "onset_f1": 0.015625,
+      "note_f0": 0.0,
+      "note_f1": 0.0,
+      "note_f2": 0.0,
+      "note_f3": 0.0,
+      "note_f4": 0.0,
+      "note_f_avg": 0.0,
+      "note_precision": 0.0,
+      "note_recall": 0.0
+    },
+    {
+      "threshold": 0.65,
+      "thresholds": {
+        "frame": 0.65,
+        "onset": 0.65,
+        "offset": 0.5
+      },
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "onset_f1": 0.0,
+      "note_f0": 0.0,
+      "note_f1": 0.0,
+      "note_f2": 0.0,
+      "note_f3": 0.0,
+      "note_f4": 0.0,
+      "note_f_avg": 0.0,
+      "note_precision": 0.0,
+      "note_recall": 0.0
+    }
+  ],
+  "recordings": 1,
+  "mode": "full_recordings",
+  "split": "validation",
+  "architecture": "onsets",
+  "selection_metric": "note_f1",
+  "min_note_seconds": 0.04,
+  "onset_tolerance_seconds": 0.05,
+  "offset_tolerance": "max(0.05 seconds, 20% of reference duration)",
+  "calibrated_checkpoint": "C:\\jj\\AI\\tmp7ehdjkoz\\calibrated.pt"
+}
+Reading official archive indexes for additional validation recordings�
+Reading official archive indexes for additional validation recordings�
+Plan: add 2 validation recordings, 0.000 GB; 1 already available
+Reading official archive indexes for additional validation recordings�
+Plan: add 2 validation recordings, 0.000 GB; 1 already available
+[1/2] validation extra-1.wav (0.0 MB)
+[1/2] validation extra-1.midi (0.0 MB)
+[2/2] validation extra-0.wav (0.0 MB)
+[2/2] validation extra-0.midi (0.0 MB)
+Ready: 3 complete validation pairs
+ok
+test_viewer_json_and_plot (test_pipeline.PipelineTest.test_viewer_json_and_plot) ... ok
+test_auto_engine_uses_installed_piano (test_soundfont.SoundfontTest.test_auto_engine_uses_installed_piano) ... ok
+test_cancellation_closes_synth_and_preserves_previous_export (test_soundfont.SoundfontTest.test_cancellation_closes_synth_and_preserves_previous_export) ... ok
+test_real_piano_stereo_pitch_velocity_pedal_and_loud_chord (test_soundfont.SoundfontTest.test_real_piano_stereo_pitch_velocity_pedal_and_loud_chord) ... ok
+test_stereo_events_repeated_keys_velocities_and_overlapping_pedal (test_soundfont.SoundfontTest.test_stereo_events_repeated_keys_velocities_and_overlapping_pedal) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 38.852s
+
+OK

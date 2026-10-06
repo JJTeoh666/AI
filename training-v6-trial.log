@@ -1,0 +1,8 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+Transferred complete recognizer from checkpoints/piano-v5.pt; optimizer and epoch start fresh
+Training onsets-multires-global (1,443,119 parameters) on 41 recordings; validating on 16; device=cpu; selection=note_f_avg; early_stopping_patience=20; augmentation=True
+Calibrating three global threshold parameters on decoded validation note_f_avg
+Bass-focused window fraction=0.50; 18874 training bass strikes indexed; validation sampling unchanged
+Saved starting model for comparison: note_f_avg=0.4043; best checkpoint will change only on validation improvement
+epoch=1 train_loss=1.0984 val_loss=0.1082 val_f1=0.4899 onset_f1=0.6435 note_f1=0.4007 note_f_avg=0.4017 stale_epochs=1 note_macro_f1=0.2958 covered_pitches=76/88 precision=0.3894 recall=0.6603 frame=0.65 onset=0.65 offset=0.35 lr=0.0001
+Latest training state: checkpoints\piano-v6-trial.last.pt

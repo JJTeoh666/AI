@@ -1,0 +1,18 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+Verified: recognizer parameters and buffers are unchanged
+Evaluating validation recording 1/4
+Evaluating validation recording 2/4
+Evaluating validation recording 3/4
+Evaluating validation recording 4/4
+{
+  "baseline": {
+    "note_f1": 0.23740747427333453,
+    "onset_f1": 0.40855750135403507,
+    "f1": 0.40288144985169005
+  },
+  "learned_trial": {
+    "note_f1": 0.2244837466653493,
+    "onset_f1": 0.38711589763857324,
+    "f1": 0.404384613761526
+  }
+}

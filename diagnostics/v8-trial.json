@@ -1,0 +1,72 @@
+{
+  "architecture": "onsets-fourier-recurrent",
+  "parameters": 10012924,
+  "fan_layers": 3,
+  "tests_passed": 74,
+  "trial_only": true,
+  "random_initialization": true,
+  "seed": 20261006,
+  "train_recordings": 41,
+  "validation_recordings": 16,
+  "training_windows": 41,
+  "validation_windows": 16,
+  "epochs_completed": 1,
+  "selection_metric": "note_macro_f0123",
+  "pitch_macro_scores": {
+    "note_macro_f0": 0.00011757789535567314,
+    "note_macro_f1": 0.00020481310803891452,
+    "note_macro_f2": 0.00036913990402362494,
+    "note_macro_f3": 0.0005039052658100277,
+    "note_macro_f0123": 0.0002988590433070601
+  },
+  "initial_thresholds": {
+    "frame": 0.44682687520980835,
+    "onset": 0.37282538414001465,
+    "offset": 0.4343653619289398
+  },
+  "trained_thresholds": {
+    "frame": 0.4539695084095001,
+    "onset": 0.37952926754951477,
+    "offset": 0.44134047627449036
+  },
+  "training_settings": {
+    "augment": false,
+    "positive_weight": 5.0,
+    "event_weight": 10.0,
+    "threshold_grid": [],
+    "thresholds_only": false,
+    "freeze_thresholds": false,
+    "threshold_lr": 0.003,
+    "threshold_loss_weight": 1.0,
+    "threshold_temperature": 0.1,
+    "threshold_regularization": 0.05,
+    "threshold_objective": "pitch_f0123",
+    "seconds": 4.0,
+    "windows_per_file": 1,
+    "seed": 20261006,
+    "patience": 20,
+    "threshold_calibration": "training",
+    "calibration_values": [
+      0.35,
+      0.5,
+      0.65,
+      0.8
+    ],
+    "calibration_every": 5,
+    "bass_sampling": 0.3,
+    "bass_max_note": 47,
+    "treble_sampling": 0.3,
+    "treble_min_note": 84,
+    "edge_loss_weight": 2.0,
+    "offset_loss_weight": 1.0,
+    "release_loss_weight": 0.25
+  },
+  "calibration_candidates": 1,
+  "covered_validation_pitches": 63,
+  "bass_reference_notes": 67,
+  "treble_reference_notes": 118,
+  "train_seconds": 14.114019499975257,
+  "validation_seconds": 2.3334794000256807,
+  "inference_checkpoint_load_verified": true,
+  "accuracy_conclusion": "One short epoch verifies execution; the randomly initialized recognizer needs a full training run."
+}

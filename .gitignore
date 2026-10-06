@@ -1,0 +1,12 @@
+.venv/
+.deps/
+data/
+checkpoints/
+__pycache__/
+*.pyc
+*.partial
+.piano-playback-*/
+assets/downloads/
+assets/fluidsynth/*.dll
+assets/fluidsynth/*.exe
+assets/piano/*.sf2

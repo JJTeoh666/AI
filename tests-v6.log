@@ -1,0 +1,15 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+test_bass_download_only_adds_verified_official_train_pairs (test_multires.MultiResolutionTest.test_bass_download_only_adds_verified_official_train_pairs) ... ok
+test_bass_selection_respects_budget_and_favors_scarce_pitches (test_multires.MultiResolutionTest.test_bass_selection_respects_budget_and_favors_scarce_pitches) ... ok
+test_bass_windows_use_train_anchors_and_validation_stays_fixed (test_multires.MultiResolutionTest.test_bass_windows_use_train_anchors_and_validation_stays_fixed) ... ok
+test_cli_auto_and_version_six_options (test_multires.MultiResolutionTest.test_cli_auto_and_version_six_options) ... ok
+test_release_decoder_ignores_short_dips_and_backdates_actual_silence (test_multires.MultiResolutionTest.test_release_decoder_ignores_short_dips_and_backdates_actual_silence) ... ok
+test_release_loss_pushes_activity_toward_both_sides_of_boundary (test_multires.MultiResolutionTest.test_release_loss_pushes_activity_toward_both_sides_of_boundary) ... ok
+test_training_resume_calibration_parameters_and_app_inference (test_multires.MultiResolutionTest.test_training_resume_calibration_parameters_and_app_inference) ... ok
+test_v5_transfer_preserves_predictions_and_new_branch_learns (test_multires.MultiResolutionTest.test_v5_transfer_preserves_predictions_and_new_branch_learns) ... ok
+test_validation_calibration_selects_exact_notes_and_keeps_current_candidate (test_multires.MultiResolutionTest.test_validation_calibration_selects_exact_notes_and_keeps_current_candidate) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 12.897s
+
+OK

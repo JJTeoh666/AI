@@ -1,0 +1,6 @@
+torch>=2.4
+torchaudio>=2.4
+numpy>=1.26
+scipy>=1.12
+remotezip>=0.12
+matplotlib>=3.8

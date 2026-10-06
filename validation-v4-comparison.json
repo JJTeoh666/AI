@@ -1,0 +1,28 @@
+{
+  "split": "validation",
+  "mode": "full_recordings",
+  "same_thresholds": true,
+  "baseline": {
+    "checkpoint": "checkpoints/piano-v3.pt",
+    "recordings": 16,
+    "architecture": "onsets-calibrated",
+    "note_f1": 0.20580526162508495,
+    "onset_f1": 0.4376274148140958,
+    "f1": 0.45467194360274565,
+    "note_precision": 0.21850163761709535,
+    "note_recall": 0.19450334366335018
+  },
+  "recurrent_trial": {
+    "checkpoint": "checkpoints/piano-v4-trial.pt",
+    "best_epoch": 3,
+    "recordings": 16,
+    "architecture": "onsets-recurrent",
+    "note_f1": 0.20577089946508795,
+    "onset_f1": 0.4407587623430687,
+    "f1": 0.44976400883711587,
+    "note_precision": 0.22305036313846888,
+    "note_recall": 0.1909761865927255
+  },
+  "note_f1_change": -3.4362159996997876e-05,
+  "conclusion": "No measurable improvement in note F1 after this five-epoch trial; both round to 0.2058."
+}

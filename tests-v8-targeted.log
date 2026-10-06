@@ -1,0 +1,14 @@
+Failed to find real location of C:\Users\jjteo\AppData\Local\Programs\Python\Python313\python.exe
+test_default_model_has_ten_million_active_parameters_and_all_branches_learn (test_v8.FourierModelTest.test_default_model_has_ten_million_active_parameters_and_all_branches_learn) ... ok
+test_fourier_blocks_handle_short_odd_and_even_frame_lengths (test_v8.FourierModelTest.test_fourier_blocks_handle_short_odd_and_even_frame_lengths) ... ok
+test_fourier_layer_keeps_selected_modes_and_has_trainable_gradients (test_v8.FourierModelTest.test_fourier_layer_keeps_selected_modes_and_has_trainable_gradients) ... ok
+test_macro_four_scores_give_each_supported_key_equal_weight (test_v8.FourierModelTest.test_macro_four_scores_give_each_supported_key_equal_weight) ... ok
+test_auto_training_resume_checkpoint_roundtrip_and_app_inference (test_v8.V8PipelineTest.test_auto_training_resume_checkpoint_roundtrip_and_app_inference) ... ok
+test_best_checkpoint_scheduler_and_stopping_follow_four_score_average (test_v8.V8PipelineTest.test_best_checkpoint_scheduler_and_stopping_follow_four_score_average) ... ok
+test_evaluation_csv_and_calibrated_copy_preserve_v8_format (test_v8.V8PipelineTest.test_evaluation_csv_and_calibrated_copy_preserve_v8_format) ... ok
+test_v8_cli_dimensions_and_incompatible_initialization (test_v8.V8PipelineTest.test_v8_cli_dimensions_and_incompatible_initialization) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 33.536s
+
+OK
