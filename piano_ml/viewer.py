@@ -11,6 +11,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
 from .decode import pitch_name
+from .plot_fonts import plot_font_families
 
 
 def read_prediction(path: str | Path) -> dict:
@@ -82,7 +83,8 @@ def draw_prediction(figure: Figure, result: dict,
     audio_name = Path(result.get("audio") or "Piano recording").name
     model_name = Path(result.get("model") or "Saved result").name
     figure.suptitle(f"{audio_name}  |  {model_name}  |  threshold {result.get('threshold', 0.5):.2f}",
-                    x=0.075, ha="left", fontsize=10, color="#344054")
+                    x=0.075, ha="left", fontsize=10, color="#344054",
+                    fontfamily=plot_font_families())
     grid = figure.add_gridspec(3, 1, height_ratios=(1, 4, 0.9), hspace=0.08)
     wave_axis = figure.add_subplot(grid[0])
     note_axis = figure.add_subplot(grid[1], sharex=wave_axis)
@@ -126,7 +128,8 @@ def draw_prediction(figure: Figure, result: dict,
         for row in range(3):
             if center - half_width >= label_ends[row]:
                 chord_axis.text(center, (0.2, 0.5, 0.8)[row], chord["name"],
-                                ha="center", va="center", fontsize=8, clip_on=True)
+                                ha="center", va="center", fontsize=8, clip_on=True,
+                                fontfamily=plot_font_families())
                 label_ends[row] = center + half_width
                 break
     if not result["chords"]:

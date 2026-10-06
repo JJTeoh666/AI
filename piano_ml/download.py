@@ -77,10 +77,11 @@ def download_subset(root: str | Path, counts: dict[str, int]) -> None:
 
 
 def download_additional(root: str | Path, gigabytes: float = 1.0, seed: int = 42,
-                        dry_run: bool = False) -> dict:
+                        dry_run: bool = False, train_only: bool = False) -> dict:
     """Add approximately the requested GB of usable pairs, using archive sizes.
 
-    Allocate 80/10/10 percent of additional disk bytes to the official splits.
+    Allocate all bytes to official training pairs when train_only is enabled;
+    otherwise allocate 80/10/10 percent to the official splits.
     Sample different performances with a seeded shuffle and limit piece size
     so a small budget still includes a useful number of recordings.
     """
@@ -106,7 +107,9 @@ def download_additional(root: str | Path, gigabytes: float = 1.0, seed: int = 42
         wav_names, midi_names = wav_zip.namelist(), midi_zip.namelist()
         randomizer = random.Random(seed)
         selected = []
-        for split, fraction in (("train", 0.8), ("validation", 0.1), ("test", 0.1)):
+        allocation = (("train", 1.0),) if train_only else (
+            ("train", 0.8), ("validation", 0.1), ("test", 0.1))
+        for split, fraction in allocation:
             remaining = round(budget * fraction)
             max_piece_bytes = min(100_000_000, remaining // (10 if split == "train" else 2))
             candidates = [row for row in rows if row["split"] == split]
@@ -140,7 +143,8 @@ def download_additional(root: str | Path, gigabytes: float = 1.0, seed: int = 42
         manifest = {"source": "https://magenta.withgoogle.com/datasets/maestro",
                     "version": "3.0.0", "requested_additional_bytes": budget,
                     "planned_additional_bytes": planned, "estimated_transfer_bytes": compressed,
-                    "seed": seed, "split_counts": counts, "records": selected,
+                    "seed": seed, "train_only": train_only,
+                    "split_counts": counts, "records": selected,
                     "status": "planned"}
         plan_path = root / "additional-download-plan.json"
         plan_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

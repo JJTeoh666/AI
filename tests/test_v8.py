@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import math
 import tempfile
 import unittest
@@ -175,10 +176,19 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(saved["selection_metric"], "note_macro_f0123")
         self.assertEqual(saved["training_config"]["threshold_objective"], "pitch_f0123")
         self.assertEqual(saved["training_config"]["threshold_calibration"], "training")
-        self.assertEqual(saved["training_config"]["patience"], 20)
+        self.assertEqual(saved["training_config"]["patience"], 0)
+        self.assertFalse(saved["training_config"]["early_stopping"])
         self.assertEqual(saved["training_config"]["treble_sampling"], 0.3)
         self.assertEqual(saved["validation"]["calibration_candidates"], 1)
         self.assertEqual(saved["validation"]["calibration_search"], "parameters")
+        history_path = checkpoint.with_suffix(".history.jsonl")
+        original_history = history_path.read_text()
+        history = json.loads(original_history.strip())
+        self.assertEqual(saved["training_metrics"]["total_loss"], history["train_loss"])
+        self.assertEqual(saved["training_metrics"]["frame_bce"], history["train_frame_bce"])
+        self.assertEqual(saved["training_metrics"]["loss_components"], history["train_loss_components"])
+        self.assertAlmostEqual(sum(history["train_loss_components"].values()), history["train_loss"], places=6)
+        self.assertIn("frame_bce", saved["validation"])
         loaded = load_model(latest, torch.device("cpu"))
         recreated = build_model(saved["model_config"]).eval()
         recreated.load_state_dict(saved["model"])
@@ -187,6 +197,10 @@ class V8PipelineTest(unittest.TestCase):
             before, after = loaded(audio), recreated(audio)
         for head in before:
             self.assertTrue(torch.equal(before[head], after[head]))
+        # Mimic an older checkpoint without reporting fields, retaining its comparison state.
+        saved.pop("training_metrics")
+        saved["validation"].pop("frame_bce")
+        torch.save(saved, latest)
         with redirect_stdout(io.StringIO()):
             train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
                                feature_width=None, fourier_modes=None, fourier_layers=None))
@@ -194,6 +208,10 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(resumed["epoch"], 2)
         self.assertEqual(resumed["validation_signature"], saved["validation_signature"])
         self.assertEqual(resumed["model_config"], saved["model_config"])
+        self.assertIn("frame_bce", resumed["validation"])
+        self.assertIn("training_metrics", resumed)
+        self.assertTrue(history_path.read_text().startswith(original_history))
+        self.assertEqual(len(history_path.read_text().splitlines()), 2)
         threshold_id = resumed["optimizer"]["param_groups"][1]["params"][0]
         self.assertEqual(float(resumed["optimizer"]["state"][threshold_id]["step"]), 2)
         self.assertFalse(torch.equal(saved["model"]["threshold_module.raw"], resumed["model"]["threshold_module.raw"]))
@@ -202,7 +220,38 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(len(result["thresholds"]), 3)
         self.assertNotIn("register_thresholds", result)
 
-    def test_best_checkpoint_scheduler_and_stopping_follow_four_score_average(self):
+    def test_weighted_and_frozen_threshold_reporting_uses_existing_forward_passes(self):
+        original_forward = FourierRecurrentPianoNet.forward
+        for frozen in (False, True):
+            with self.subTest(frozen=frozen):
+                modes = []
+                def counted_forward(model, waves):
+                    modes.append(model.training)
+                    return original_forward(model, waves)
+                checkpoint = self.root / f"loss-{frozen}.pt"
+                console = io.StringIO()
+                with patch.object(FourierRecurrentPianoNet, "forward", new=counted_forward), redirect_stdout(console):
+                    train(self.options(checkpoint, threshold_loss_weight=2.5, freeze_thresholds=frozen))
+                self.assertEqual(modes, [True, False])  # One training batch and one validation batch.
+                history = json.loads(checkpoint.with_suffix(".history.jsonl").read_text().strip())
+                parts = history["train_loss_components"]
+                self.assertEqual(set(parts), {"frame", "onset", "offset", "release", "velocity", "pedal", "threshold"})
+                self.assertAlmostEqual(sum(parts.values()), history["train_loss"], places=6)
+                self.assertAlmostEqual(parts["threshold"], 2.5 * history["threshold_loss"], places=6)
+                if frozen:
+                    self.assertEqual(parts["threshold"], 0)
+                    self.assertEqual(history["threshold_loss"], 0)
+                else:
+                    self.assertGreater(parts["threshold"], 0)
+                for filename in (checkpoint, checkpoint.with_name(checkpoint.stem + ".last.pt")):
+                    saved = torch.load(filename, weights_only=True)
+                    self.assertEqual(saved["training_metrics"]["loss_components"], parts)
+                    self.assertEqual(saved["training_metrics"]["frame_bce"], history["train_frame_bce"])
+                    self.assertEqual(saved["selection_metric"], "note_macro_f0123")
+                for field in ("train_total_loss=", "train_frame_bce=", "val_frame_bce=", "train_loss_components:"):
+                    self.assertIn(field, console.getvalue())
+
+    def test_best_checkpoint_scheduler_and_all_epochs_follow_four_score_average(self):
         checkpoint = self.root / "selection.pt"
         calls = []
         def scores(model, *args, selection_metric, threshold_configs, **kwargs):
@@ -211,21 +260,42 @@ class V8PipelineTest(unittest.TestCase):
             calls.append(model.learned_thresholds())
             value = 0.65 if len(calls) == 1 else 0.6
             other = 0.1 + len(calls) * 0.1
-            return {"loss": 0.1, "f1": other, "note_f1": other, "note_f_avg": other,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": other, "note_f1": other, "note_f_avg": other,
                     "note_macro_f03": other, "note_macro_f0": other, "note_macro_f2": other,
                     "note_macro_f3": other, "note_macro_f0123": value,
                     "onset_f1": other, "precision": other, "recall": other,
                     "threshold": calls[-1].frame, "thresholds": calls[-1].to_dict()}
-        with patch("piano_ml.training.score", side_effect=scores), redirect_stdout(io.StringIO()):
+        console = io.StringIO()
+        with patch("piano_ml.training.score", side_effect=scores), redirect_stdout(console):
             train(self.options(checkpoint, epochs=5, patience=2, lr_patience=0))
         best = torch.load(checkpoint, weights_only=True)
         latest = torch.load(self.root / "selection.last.pt", weights_only=True)
         self.assertEqual(best["epoch"], 1)
         self.assertEqual(best["best_score"], 0.65)
-        self.assertEqual(latest["epoch"], 3)
-        self.assertEqual(latest["stale_epochs"], 2)
+        self.assertEqual(latest["epoch"], 5)
+        self.assertEqual(latest["stale_epochs"], 4)
+        self.assertFalse(latest["training_config"]["early_stopping"])
+        self.assertEqual(latest["training_config"]["patience"], 0)
+        self.assertNotIn("Early stopping after", console.getvalue())
         self.assertLess(latest["optimizer"]["param_groups"][0]["lr"], 1e-3)
         self.assertGreater(latest["validation"]["note_macro_f03"], best["validation"]["note_macro_f03"])
+
+        # An old stopped checkpoint must still complete every additional epoch.
+        latest["stale_epochs"] = 20
+        latest["training_config"]["patience"] = 20
+        latest["training_config"].pop("early_stopping")
+        latest_path = self.root / "selection.last.pt"
+        torch.save(latest, latest_path)
+        with patch("piano_ml.training.score", side_effect=scores), redirect_stdout(console):
+            train(self.options(checkpoint, epochs=3, resume=str(latest_path),
+                               hidden_size=None, gru_layers=None, lr=None, patience=20))
+        resumed = torch.load(latest_path, weights_only=True)
+        self.assertEqual(resumed["epoch"], 8)
+        self.assertEqual(resumed["stale_epochs"], 23)
+        self.assertEqual(resumed["best_score"], best["best_score"])
+        self.assertEqual(torch.load(checkpoint, weights_only=True)["epoch"], 1)
+        self.assertFalse(resumed["training_config"]["early_stopping"])
+        self.assertEqual(resumed["training_config"]["patience"], 0)
 
     def test_evaluation_csv_and_calibrated_copy_preserve_v8_format(self):
         model = FourierRecurrentPianoNet(feature_width=32, fourier_modes=3, fourier_layers=1,

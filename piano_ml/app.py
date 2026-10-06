@@ -19,12 +19,8 @@ import torch
 from .thresholds import Thresholds, saved_thresholds
 from .score import draw_staff
 from .synthesis import render_result_wav, piano_sound_name
+from .playback import WavPlayer, playback_available
 from .viewer import active_at, draw_prediction, read_prediction, waveform_envelope
-
-try:
-    import winsound
-except ImportError:
-    winsound = None
 
 PROJECT = Path(__file__).resolve().parent.parent
 
@@ -61,11 +57,18 @@ class PianoApp:
         self.result = None
         self.axes, self.cursor_lines = [], []
         self.messages = queue.Queue()
+        self.volume = tk.DoubleVar(value=50)
+        self.volume_text = tk.StringVar(value="50%")
+        self.gain = tk.DoubleVar(value=0)
+        self.gain_text = tk.StringVar(value="+0.0 dB")
+        self.player = WavPlayer(on_error=lambda error: self.messages.put(("playback_error", error))) if playback_available() else None
         self.cancel_event = threading.Event()
         self.busy = False
         self.playing_since = None
         self.playing_duration = 0
         self.staff_bpm = tk.DoubleVar(value=120)
+        self.staff_zoom = tk.DoubleVar(value=125)
+        self.staff_zoom_text = tk.StringVar(value="125%")
         self.staff_tempo = 120.0
         self.staff_names = tk.BooleanVar(value=False)
         self.staff_page_text = tk.StringVar(value="No score loaded")
@@ -85,8 +88,21 @@ class PianoApp:
         root.after(100, self.poll)
 
     def _build(self) -> None:
-        outer = ttk.Frame(self.root, padding=18)
-        outer.pack(fill="both", expand=True)
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        body = ttk.Frame(self.root)
+        body.grid(row=0, column=0, sticky="nsew")
+        self.scroll_canvas = tk.Canvas(body, background="#f4f6fa", highlightthickness=0,
+                                       yscrollincrement=24)
+        self.page_scrollbar = ttk.Scrollbar(body, orient="vertical", command=self.scroll_canvas.yview)
+        self.page_scrollbar.pack(side="right", fill="y")
+        self.scroll_canvas.configure(yscrollcommand=self.page_scrollbar.set)
+        self.scroll_canvas.pack(side="left", fill="both", expand=True)
+        outer = self.scroll_content = ttk.Frame(self.scroll_canvas, padding=18)
+        self.scroll_window = self.scroll_canvas.create_window(0, 0, window=outer, anchor="nw")
+        outer.bind("<Configure>", self.fit_scroll_content)
+        self.scroll_canvas.bind("<Configure>", self.fit_scroll_content)
+        self._wheel_remainder = 0.0
         ttk.Label(outer, text="Piano Notes", style="Title.TLabel").pack(anchor="w")
         ttk.Label(outer, text="Explore detected keys, confidence and chords across your recording.").pack(anchor="w", pady=(3, 14))
         controls = ttk.Frame(outer)
@@ -146,12 +162,20 @@ class PianoApp:
         ttk.Button(staff_controls, text="Next ›", command=lambda: self.change_staff_page(1)).pack(side="right")
         ttk.Label(staff_controls, textvariable=self.staff_page_text).pack(side="right", padx=10)
         ttk.Button(staff_controls, text="‹ Previous", command=lambda: self.change_staff_page(-1)).pack(side="right")
-        self.staff_figure = Figure(figsize=(11, 6), dpi=100)
+        staff_zoom_row = ttk.Frame(staff_tab, padding=(6, 0, 6, 6))
+        staff_zoom_row.pack(fill="x")
+        ttk.Label(staff_zoom_row, text="Staff zoom").pack(side="left")
+        self.staff_zoom_slider = ttk.Scale(staff_zoom_row, from_=75, to=200, orient="horizontal",
+                                           length=180, variable=self.staff_zoom, command=self.update_staff_zoom)
+        self.staff_zoom_slider.pack(side="left", padx=8)
+        ttk.Label(staff_zoom_row, textvariable=self.staff_zoom_text, width=5).pack(side="left")
+        self.staff_figure = Figure(figsize=(11, 6), dpi=125)
         self.staff_figure.text(0.5, 0.5, "Load audio and analyze, or open a saved result",
                                ha="center", va="center", color="#667085", fontsize=14)
         self.staff_canvas = FigureCanvasTkAgg(self.staff_figure, master=staff_tab)
         self.staff_toolbar = NavigationToolbar2Tk(self.staff_canvas, staff_tab, pack_toolbar=False)
         self.staff_toolbar.pack(side="bottom", fill="x")
+        self.staff_canvas.get_tk_widget().configure(height=750)
         self.staff_canvas.get_tk_widget().pack(fill="both", expand=True)
         self.staff_canvas.mpl_connect("button_press_event", self.on_staff_click)
         self.figure = Figure(figsize=(11, 6), dpi=100)
@@ -168,27 +192,78 @@ class PianoApp:
         self.chords_table = self._table(chords_tab, ("Chord", "Start (s)", "End (s)", "Duration (s)"))
         self.notes_table.bind("<<TreeviewSelect>>", self.on_note_select)
         self.chords_table.bind("<<TreeviewSelect>>", self.on_chord_select)
-        playback = ttk.Frame(outer)
-        playback.pack(fill="x", pady=(8, 0))
+        playback = self.playback_controls = ttk.Frame(self.root, padding=(18, 8, 18, 0))
+        playback.grid(row=1, column=0, sticky="ew")
+        playback.columnconfigure(4, weight=1)
         self.play_result_button = ttk.Button(playback, text="Play result", style="Accent.TButton",
-                                            command=self.play_result, state="normal" if winsound else "disabled")
-        self.play_result_button.pack(side="left")
+                                            command=self.play_result, state="normal" if self.player else "disabled")
+        self.play_result_button.grid(row=0, column=0)
         self.play_original_button = ttk.Button(playback, text="Play original", command=self.play,
-                                               state="normal" if winsound else "disabled")
-        self.play_original_button.pack(side="left", padx=8)
-        ttk.Button(playback, text="Stop", command=self.stop).pack(side="left")
-        ttk.Label(playback, text=f"Sound: {piano_sound_name()}").pack(side="left", padx=8)
+                                               state="normal" if self.player else "disabled")
+        self.play_original_button.grid(row=0, column=1, padx=8)
+        ttk.Button(playback, text="Stop", command=self.stop).grid(row=0, column=2)
+        ttk.Label(playback, text="Volume").grid(row=0, column=3, padx=(12, 6))
+        self.volume_slider = ttk.Scale(playback, from_=0, to=100, orient="horizontal", length=160,
+                                       variable=self.volume, command=self.update_volume,
+                                       state="normal" if self.player else "disabled")
+        self.volume_slider.grid(row=0, column=4, sticky="ew")
+        ttk.Label(playback, textvariable=self.volume_text, width=5, anchor="e").grid(row=0, column=5, padx=(6, 12))
         self.export_audio_button = ttk.Button(playback, text="Export result WAV…", command=self.export_audio)
-        self.export_audio_button.pack(side="right")
-        footer = ttk.Frame(outer)
-        footer.pack(side="bottom", fill="x", pady=(8, 0))
+        self.export_audio_button.grid(row=0, column=6)
+        gain_row = ttk.Frame(playback)
+        gain_row.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(6, 0))
+        gain_row.columnconfigure(1, weight=1)
+        ttk.Label(gain_row, text="Gain").grid(row=0, column=0, padx=(0, 8))
+        self.gain_slider = ttk.Scale(gain_row, from_=0, to=24, orient="horizontal", length=160,
+                                     variable=self.gain, command=self.update_gain,
+                                     state="normal" if self.player else "disabled")
+        self.gain_slider.grid(row=0, column=1, sticky="ew")
+        ttk.Label(gain_row, textvariable=self.gain_text, width=9, anchor="e").grid(row=0, column=2, padx=(8, 0))
+        ttk.Label(playback, text=f"Sound: {piano_sound_name()}").grid(row=2, column=0, columnspan=7,
+                                                                  sticky="w", pady=(4, 0))
+        footer = ttk.Frame(self.root, padding=(18, 8, 18, 12))
+        footer.grid(row=2, column=0, sticky="ew")
         ttk.Label(footer, textvariable=self.cursor_text).pack(anchor="w", pady=(0, 4))
         self.progress = ttk.Progressbar(footer, mode="determinate")
         self.progress.pack(fill="x", pady=4)
         ttk.Label(footer, textvariable=self.status, wraplength=1150).pack(anchor="w")
-        # Reserve controls and the footer before allocating space to plots.
-        # A tall requested canvas must not push the playback buttons offscreen.
         tabs.pack(fill="both", expand=True, pady=(8, 0))
+        self.root.bind("<MouseWheel>", self.scroll_page, add="+")
+        self.root.bind("<Button-4>", self.scroll_page, add="+")
+        self.root.bind("<Button-5>", self.scroll_page, add="+")
+
+    def fit_scroll_content(self, _event=None) -> None:
+        width = self.scroll_canvas.winfo_width()
+        # Leave height automatic so notebook/zoom requests resize the content.
+        self.scroll_canvas.itemconfigure(self.scroll_window, width=width)
+        self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox(self.scroll_window))
+
+    def scroll_page(self, event):
+        # Tables keep their own scrolling; playback sliders sit outside this viewport.
+        if isinstance(event.widget, (ttk.Treeview, ttk.Combobox, ttk.Spinbox, ttk.Scale)):
+            return
+        canvas = self.scroll_canvas
+        x, y = event.x_root - canvas.winfo_rootx(), event.y_root - canvas.winfo_rooty()
+        if not (0 <= x < canvas.winfo_width() and 0 <= y < canvas.winfo_height()):
+            return
+        number = getattr(event, "num", None)
+        if number in (4, 5):
+            units = -3 if number == 4 else 3
+        else:
+            self._wheel_remainder += event.delta / 120
+            steps = int(self._wheel_remainder)
+            self._wheel_remainder -= steps
+            units = -3 * steps
+        if units:
+            canvas.yview_scroll(units, "units")
+            return "break"
+
+    def update_staff_zoom(self, value) -> None:
+        zoom = max(75, min(200, round(float(value))))
+        self.staff_zoom_text.set(f"{zoom}%")
+        self.staff_figure.set_dpi(zoom)
+        self.staff_canvas.get_tk_widget().configure(height=round(600 * zoom / 100))
+        self.staff_canvas.draw_idle()
 
     def _table(self, parent, columns):
         table = ttk.Treeview(parent, columns=columns, show="headings", selectmode="browse")
@@ -286,7 +361,7 @@ class PianoApp:
         self.task_kind = kind if busy else None
         self.analyze_button.configure(state="disabled" if busy else "normal")
         self.cancel_button.configure(state="normal" if busy else "disabled", command=self.cancel_active)
-        state = "normal" if winsound and not busy else "disabled"
+        state = "normal" if self.player and not busy else "disabled"
         self.play_result_button.configure(state=state)
         self.play_original_button.configure(state=state)
         self.export_audio_button.configure(state="disabled" if busy else "normal")
@@ -319,6 +394,10 @@ class PianoApp:
                     done, total = value
                     self.progress["value"] = 100 * done / total
                     self.status.set(f"{'Rendering detected notes' if kind == 'audio_progress' else 'Analyzing audio'}: {done}/{total} segments")
+                elif kind == "playback_error":
+                    self.stop()
+                    self.status.set("Playback failed.")
+                    messagebox.showerror("Cannot play audio", value, parent=self.root)
                 else:
                     self.set_busy(False)
                     if kind == "result":
@@ -340,7 +419,7 @@ class PianoApp:
             pass
         if self.playing_since is not None and self.result:
             elapsed = time.monotonic() - self.playing_since
-            if elapsed >= self.playing_duration:
+            if self.player is None or not self.player.is_playing:
                 self.stop()
             else:
                 self.move_cursor(elapsed)
@@ -499,7 +578,7 @@ class PianoApp:
                 messagebox.showerror("Cannot save plot", str(error), parent=self.root)
 
     def play(self) -> None:
-        if not self.result or winsound is None:
+        if not self.result or self.player is None:
             return
         audio = Path(self.result.get("audio", ""))
         if not audio.is_file():
@@ -508,18 +587,30 @@ class PianoApp:
         self.start_playback(audio, "original recording")
 
     def start_playback(self, audio: Path, label: str) -> None:
-        if winsound is None:
+        if self.player is None:
             return
         try:
             self.stop()
-            with wave.open(str(audio), "rb") as wav:
-                self.playing_duration = wav.getnframes() / wav.getframerate()
-            winsound.PlaySound(str(audio), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+            self.player.set_volume(round(self.volume.get()))
+            self.player.set_gain(round(self.gain.get(), 1))
+            self.playing_duration = self.player.play(audio)
             self.playing_since = time.monotonic()
             self.move_cursor(0)
             self.status.set(f"Playing {label} from the start.")
-        except (RuntimeError, OSError, wave.Error) as error:
+        except (RuntimeError, OSError, ValueError, wave.Error) as error:
             messagebox.showerror("Cannot play audio", str(error), parent=self.root)
+
+    def update_volume(self, value) -> None:
+        percent = max(0, min(100, round(float(value))))
+        self.volume_text.set(f"{percent}%")
+        if self.player is not None:
+            self.player.set_volume(percent)
+
+    def update_gain(self, value) -> None:
+        decibels = max(0, min(24, round(float(value), 1)))
+        self.gain_text.set(f"+{decibels:.1f} dB")
+        if self.player is not None:
+            self.player.set_gain(decibels)
 
     def play_result(self) -> None:
         self.prepare_result_audio()
@@ -582,8 +673,8 @@ class PianoApp:
     def stop(self) -> None:
         if self.busy and self.task_kind == "audio":
             self.audio_cancel.set()
-        if self.playing_since is not None and winsound:
-            winsound.PlaySound(None, 0)
+        if self.player is not None:
+            self.player.stop()
         self.playing_since = None
 
     def close(self) -> None:

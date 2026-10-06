@@ -22,6 +22,37 @@ from .model import (N_NOTES, LOW_NOTE, HIGH_NOTE, SAMPLE_RATE, HOP_LENGTH, build
                     BALANCED_ARCHITECTURES, RECURRENT_CONV_ARCHITECTURES,
                     MULTIRES_ARCHITECTURES, default_selection_metric, checkpoint_format_version)
 
+LOSS_COMPONENTS = ("frame", "onset", "offset", "release", "velocity", "pedal", "threshold")
+
+
+class _FrameBCEAccumulator:
+    """Unweighted frame BCE, with element and legacy batch mean reductions."""
+
+    def __init__(self):
+        self.element_total = None
+        self.batch_total = None
+        self.elements = 0
+        self.batches = 0
+
+    @torch.no_grad()
+    def add(self, logits, targets):
+        value = nn.functional.binary_cross_entropy_with_logits(logits, targets).to(torch.float64)
+        count = targets.numel()
+        if self.element_total is None:
+            self.element_total = value * count
+            self.batch_total = value.clone()
+        else:
+            self.element_total += value * count
+            self.batch_total += value
+        self.elements += count
+        self.batches += 1
+
+    def mean(self):
+        return float(self.element_total / self.elements)
+
+    def batch_mean(self):
+        return float(self.batch_total / self.batches)
+
 
 def save_checkpoint(payload: dict, path: Path) -> None:
     temporary = path.with_name(path.name + ".partial")
@@ -54,14 +85,14 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
                               [model.learned_thresholds()] if hasattr(model, "learned_thresholds") else
                               threshold_grid(Thresholds(), shared_values=thresholds), min_note_seconds,
                               release_frames=model_config(model).get("release_frames", 2))
-    loss_total = 0.0
+    frame_loss = _FrameBCEAccumulator()
     with torch.inference_mode():
         for waves, labels in loader:
             waves = waves.to(device)
             truth = labels["frame"] if isinstance(labels, dict) else labels
             output = model(waves)
             output = output if isinstance(output, dict) else {"frame": output}
-            loss_total += float(nn.functional.binary_cross_entropy_with_logits(output["frame"], truth.to(device)))
+            frame_loss.add(output["frame"], truth.to(device))
             probabilities = {key: logits.sigmoid().cpu().numpy() for key, logits in output.items()}
             truth = truth.numpy() >= 0.5
             duration = waves.shape[1] / SAMPLE_RATE
@@ -69,7 +100,8 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
                 reference = labels.get("reference_notes", [None] * len(waves))[index] if isinstance(labels, dict) else None
                 calibration.add({key: value[index] for key, value in probabilities.items()},
                                 truth[index], reference, duration, window=True)
-    return {"loss": loss_total / len(loader), **calibration.results(selection_metric)}
+    return {"loss": frame_loss.batch_mean(), "frame_bce": frame_loss.mean(),
+            **calibration.results(selection_metric)}
 
 
 def pitch_loss_weights(bass_max_note=47, treble_min_note=84, edge_loss_weight=2.0,
@@ -84,8 +116,9 @@ def pitch_loss_weights(bass_max_note=47, treble_min_note=84, edge_loss_weight=2.
                        float(edge_loss_weight), 1.0)
 
 
-def training_loss(output, targets, positive_weight=5.0, event_weight=10.0,
-                  offset_loss_weight=0.5, release_loss_weight=0.0, pitch_weights=None):
+def training_loss_components(output, targets, positive_weight=5.0, event_weight=10.0,
+                             offset_loss_weight=0.5, release_loss_weight=0.0, pitch_weights=None):
+    """Return the six weighted contributions to the recognizer objective."""
     frame = output["frame"] if isinstance(output, dict) else output
     weight = frame.new_full((N_NOTES,), positive_weight)
 
@@ -95,12 +128,13 @@ def training_loss(output, targets, positive_weight=5.0, event_weight=10.0,
         errors = nn.functional.binary_cross_entropy_with_logits(logits, truth, pos_weight=positive, reduction="none")
         return (errors * pitch_weights).sum() / (pitch_weights.sum() * errors.numel() / N_NOTES)
 
-    loss = pitch_bce(frame, targets["frame"], weight)
+    components = {name: frame.new_zeros(()) for name in LOSS_COMPONENTS[:-1]}
+    components["frame"] = pitch_bce(frame, targets["frame"], weight)
     if not isinstance(output, dict):
-        return loss
+        return components
     event_positive = frame.new_full((N_NOTES,), event_weight)
     for key, scale in (("onset", 1.0), ("offset", offset_loss_weight)):
-        loss = loss + scale * pitch_bce(output[key], targets[key], event_positive)
+        components[key] = scale * pitch_bce(output[key], targets[key], event_positive)
     if release_loss_weight:
         # Supervise activity just before and after actual key releases. This
         # penalizes both premature endings and notes held past their reference.
@@ -109,14 +143,22 @@ def training_loss(output, targets, positive_weight=5.0, event_weight=10.0,
             boundary = boundary * pitch_weights
         frame_errors = nn.functional.binary_cross_entropy_with_logits(
             frame, targets["frame"], pos_weight=weight, reduction="none")
-        loss = loss + release_loss_weight * (frame_errors * boundary).sum() / boundary.sum().clamp_min(1)
+        components["release"] = release_loss_weight * (frame_errors * boundary).sum() / boundary.sum().clamp_min(1)
     mask = targets["onset"]
     if pitch_weights is not None:
         mask = mask * pitch_weights
     velocity = ((output["velocity"].sigmoid() - targets["velocity"]) ** 2 * mask).sum() / mask.sum().clamp_min(1)
-    loss = loss + 0.5 * velocity + 0.2 * nn.functional.binary_cross_entropy_with_logits(
+    components["velocity"] = 0.5 * velocity
+    components["pedal"] = 0.2 * nn.functional.binary_cross_entropy_with_logits(
         output["pedal"], targets["pedal"], pos_weight=frame.new_tensor([2.0]))
-    return loss
+    return components
+
+
+def training_loss(output, targets, positive_weight=5.0, event_weight=10.0,
+                  offset_loss_weight=0.5, release_loss_weight=0.0, pitch_weights=None):
+    """Keep the scalar objective API used by existing training callers."""
+    return sum(training_loss_components(output, targets, positive_weight, event_weight,
+                                        offset_loss_weight, release_loss_weight, pitch_weights).values())
 
 
 def transfer_weights(model, source):
@@ -302,7 +344,7 @@ def train(args) -> None:
     signature = hashlib.sha256(json.dumps(validation_settings, sort_keys=True).encode()).hexdigest()
     comparable = saved.get("validation_signature") == signature and output.exists()
     if resume and saved.get("selection_metric") != metric:
-        print(f"Selection metric changed to {metric}; resetting best-score comparison and early-stopping count", flush=True)
+        print(f"Selection metric changed to {metric}; resetting best-score comparison and non-improvement count", flush=True)
     lr = args.lr if args.lr is not None else (3e-4 if architecture != "frame" else 1e-3)
     if not math.isfinite(lr) or lr <= 0 or not math.isfinite(positive_weight) or positive_weight <= 0 or not math.isfinite(event_weight) or event_weight <= 0:
         raise ValueError("Learning rate and loss positive weights must be positive and finite.")
@@ -342,14 +384,13 @@ def train(args) -> None:
     if getattr(args, "reset_early_stopping", False):
         stale = 0
         scheduler.num_bad_epochs = 0
-        print("Reset early-stopping count; keeping the previous best-score target", flush=True)
-    patience = getattr(args, "patience", 20)
-    if patience < 0:
-        raise ValueError("Early stopping patience must be nonnegative; 0 disables stopping.")
+        print("Reset non-improvement and scheduler counts; keeping the previous best-score target", flush=True)
+    if getattr(args, "patience", 0):
+        print("Ignoring legacy --patience; early stopping has been removed", flush=True)
 
-    def checkpoint_payload(epoch, metrics):
+    def checkpoint_payload(epoch, metrics, training_metrics=None):
         chosen = saved_thresholds(metrics)
-        return {"format_version": checkpoint_format_version(architecture), "model": model.state_dict(), "model_config": model_config(model),
+        payload = {"format_version": checkpoint_format_version(architecture), "model": model.state_dict(), "model_config": model_config(model),
                 "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
                 "epoch": epoch, "validation": metrics, "best_f1": best_f1, "best_score": best_score,
                 "selection_metric": metric, "stale_epochs": stale, "threshold": metrics["threshold"],
@@ -360,8 +401,11 @@ def train(args) -> None:
                     "thresholds_only": thresholds_only, "freeze_thresholds": freeze_thresholds, **threshold_options,
                     "threshold_objective": "pitch_f0123" if fourier else "pitch_f03" if balanced else "f1",
                     "seconds": args.seconds, "windows_per_file": args.windows_per_file, "seed": seed,
-                    "patience": patience, "threshold_calibration": calibration_mode,
+                    "early_stopping": False, "patience": 0, "threshold_calibration": calibration_mode,
                     "calibration_values": calibration_values, "calibration_every": calibration_every, **training_options}}
+        if training_metrics is not None:
+            payload["training_metrics"] = training_metrics
+        return payload
 
     def validation_score(epoch=None):
         started = time.perf_counter()
@@ -370,8 +414,7 @@ def train(args) -> None:
         if validation_calibration:
             current = model.learned_thresholds()
             full_search = (epoch is None or epoch == 1 or epoch % calibration_every == 0
-                           or epoch == start_epoch + args.epochs
-                           or patience > 0 and stale + 1 >= patience)
+                           or epoch == start_epoch + args.epochs)
             search = "full" if full_search else "current"
             candidates = [current]
             if full_search:
@@ -392,7 +435,7 @@ def train(args) -> None:
         print(f"Fresh random initialization; seed={seed}; starting at epoch 1", flush=True)
     print(f"Training {architecture} ({sum(p.numel() for p in model.parameters()):,} parameters) on "
           f"{len(train_set.records)} recordings; validating on {len(val_set.records)}; device={device}; "
-          f"selection={metric}; early_stopping_patience={patience}; augmentation={augment}", flush=True)
+          f"selection={metric}; epochs={args.epochs}; early_stopping=disabled; augmentation={augment}", flush=True)
     print((f"Calibrating three global threshold parameters on decoded validation {metric} every {calibration_every} epochs; validating current thresholds every epoch" if validation_calibration else
            "Keeping learned threshold parameters fixed for this run" if freeze_thresholds else
            f"Learning {model.threshold_module.raw.numel()} {'global' if global_thresholds else 'register'} thresholds on training targets")
@@ -418,25 +461,34 @@ def train(args) -> None:
         model.train()
         if thresholds_only:
             model.eval()  # Freeze dropout and batch-normalization statistics as well as weights.
-        running = 0.0
-        threshold_running = 0.0
+        # Accumulate detached scalars on the device; transfer only once per epoch.
+        running = torch.zeros(2 + len(LOSS_COMPONENTS), dtype=torch.float64, device=device)
+        frame_loss = _FrameBCEAccumulator()
         for waves, targets in train_loader:
             waves = waves.to(device)
             targets = {key: value.to(device) for key, value in targets.items() if isinstance(value, torch.Tensor)}
             optimizer.zero_grad(set_to_none=True)
             predictions = model(waves)
-            loss = training_loss(predictions, targets, positive_weight, event_weight,
-                                 training_options["offset_loss_weight"], training_options["release_loss_weight"], pitch_weights)
+            components = training_loss_components(predictions, targets, positive_weight, event_weight,
+                                                 training_options["offset_loss_weight"], training_options["release_loss_weight"], pitch_weights)
+            loss = sum(components.values())
+            threshold_loss = loss.new_zeros(())
+            components["threshold"] = loss.new_zeros(())
             if learned and not freeze_thresholds and not validation_calibration:
                 threshold_loss = model.threshold_module.loss(predictions, targets,
                     threshold_options["threshold_temperature"], threshold_options["threshold_regularization"],
                     **({"pitch_weights": pitch_weights} if balanced else {}))
-                loss = loss + threshold_options["threshold_loss_weight"] * threshold_loss
-                threshold_running += float(threshold_loss.detach())
+                components["threshold"] = threshold_options["threshold_loss_weight"] * threshold_loss
+                loss = loss + components["threshold"]
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            running += float(loss.detach())
+            running += torch.stack([loss, threshold_loss, *components.values()]).detach().to(torch.float64)
+            frame_loss.add(predictions["frame"] if isinstance(predictions, dict) else predictions,
+                           targets["frame"])
+        averages = (running / len(train_loader)).cpu().tolist()
+        training_metrics = {"total_loss": averages[0], "frame_bce": frame_loss.mean(),
+                            "loss_components": dict(zip(LOSS_COMPONENTS, averages[2:]))}
         train_seconds = time.perf_counter() - epoch_started
         metrics = validation_score(epoch)
         chosen = saved_thresholds(metrics)
@@ -447,15 +499,17 @@ def train(args) -> None:
             best_score = value
         best_f1 = max(best_f1, metrics["f1"])
         scheduler.step(value)
-        log = {"epoch": epoch, "train_loss": running / len(train_loader), "validation": metrics,
+        log = {"epoch": epoch, "train_loss": training_metrics["total_loss"],
+               "train_frame_bce": training_metrics["frame_bce"],
+               "train_loss_components": training_metrics["loss_components"], "validation": metrics,
                "lr": optimizer.param_groups[0]["lr"], "selection_metric": metric, "seed": seed,
-               "best_score": best_score, "stale_epochs": stale, "patience": patience,
+               "best_score": best_score, "stale_epochs": stale, "early_stopping": False, "patience": 0,
                "train_seconds": train_seconds, "validation_seconds": metrics["validation_seconds"],
                "epoch_seconds": time.perf_counter() - epoch_started,
                "calibration_search": metrics["calibration_search"],
                "calibration_candidates": metrics["calibration_candidates"]}
         if learned:
-            log.update(threshold_loss=threshold_running / len(train_loader),
+            log.update(threshold_loss=averages[1],
                        threshold_lr=optimizer.param_groups[1]["lr"])
         summary = chosen.summary()
         pitch_summary = (f"note_macro_f1={metrics['note_macro_f1']:.4f} "
@@ -468,7 +522,9 @@ def train(args) -> None:
             pitch_summary += (f"note_macro_f2={metrics['note_macro_f2']:.4f} "
                               f"note_macro_f0123={metrics['note_macro_f0123']:.4f} ")
         threshold_digits = 6 if balanced else 2
-        print(f"epoch={epoch} train_loss={log['train_loss']:.4f} val_loss={metrics['loss']:.4f} "
+        component_summary = " ".join(f"{name}={value:.4f}" for name, value in log["train_loss_components"].items())
+        print(f"epoch={epoch} train_total_loss={log['train_loss']:.4f} "
+              f"train_frame_bce={log['train_frame_bce']:.4f} val_frame_bce={metrics['frame_bce']:.4f} "
               f"val_f1={metrics['f1']:.4f} onset_f1={metrics['onset_f1']:.4f} note_f1={metrics['note_f1']:.4f} "
               f"note_f_avg={metrics['note_f_avg']:.4f} stale_epochs={stale} "
               f"{pitch_summary}"
@@ -476,14 +532,12 @@ def train(args) -> None:
               f"frame={summary['frame']:.{threshold_digits}f} onset={summary['onset']:.{threshold_digits}f} offset={summary['offset']:.{threshold_digits}f} lr={log['lr']:.6g} "
               f"calibration={log['calibration_search']} threshold_sets={log['calibration_candidates']} "
               f"train_s={train_seconds:.1f} val_s={log['validation_seconds']:.1f}", flush=True)
-        payload = checkpoint_payload(epoch, metrics)
+        print(f"  train_loss_components: {component_summary}", flush=True)
+        payload = checkpoint_payload(epoch, metrics, training_metrics)
         save_checkpoint(payload, latest)
         if improved:
             save_checkpoint(payload, output)
             print(f"Saved best model: {output}", flush=True)
         with output.with_suffix(".history.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(log) + "\n")
-        if patience > 0 and stale >= patience:
-            print(f"Early stopping after {stale} epochs without improvement in {metric}", flush=True)
-            break
     print(f"Latest training state: {latest}", flush=True)

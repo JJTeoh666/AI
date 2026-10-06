@@ -152,7 +152,7 @@ class MultiResolutionTest(unittest.TestCase):
         loaded = load_model(latest, torch.device("cpu"))
         self.assertTrue(all(abs(saved["thresholds"][head] - value) < 1e-6
                             for head, value in loaded.learned_thresholds().to_dict().items()))
-        # Resume a run that already hit the stop count, explicitly renewing patience.
+        # The legacy reset option still clears diagnostic non-improvement counts.
         saved["stale_epochs"] = 20
         torch.save(saved, latest)
         with redirect_stdout(io.StringIO()):
@@ -176,7 +176,7 @@ class MultiResolutionTest(unittest.TestCase):
             self.assertIn(model.learned_thresholds(), threshold_configs)
             chosen = threshold_configs[-1]
             seen.append(chosen)
-            return {"loss": 0.1, "f1": 0.6, "note_f1": 0.6, "note_f_avg": 0.6,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": 0.6, "note_f1": 0.6, "note_f_avg": 0.6,
                     "onset_f1": 0.6, "precision": 0.6, "recall": 0.6,
                     "threshold": chosen.frame, "thresholds": chosen.to_dict(), "threshold_curve": []}
         with patch("piano_ml.training.score", side_effect=exact_score), redirect_stdout(io.StringIO()):
@@ -225,23 +225,23 @@ class MultiResolutionTest(unittest.TestCase):
             main()
         options = run.call_args.args[0]
         self.assertEqual(options.architecture, "auto")
-        self.assertEqual(options.patience, 20)
+        self.assertEqual(options.patience, 0)
         self.assertEqual(options.long_fft, 8192)
 
-    def test_periodic_calibration_validates_every_epoch_and_forces_search_before_stop(self):
+    def test_periodic_calibration_validates_every_epoch_without_stop_triggered_search(self):
         phases = []
         scores = iter([0.6, 0.5, 0.65, 0.5, 0.5])
         def fake_score(model, *args, threshold_configs, **kwargs):
             phases.append(len(threshold_configs) > 1)
             value = next(scores)
             chosen = threshold_configs[0]
-            return {"loss": 0.1, "f1": value, "note_f1": value, "note_f_avg": value,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": value, "note_f1": value, "note_f_avg": value,
                     "onset_f1": value, "precision": value, "recall": value,
                     "threshold": chosen.frame, "thresholds": chosen.to_dict(), "threshold_curve": []}
         checkpoint = self.root / "periodic.pt"
         with patch("piano_ml.training.score", side_effect=fake_score), redirect_stdout(io.StringIO()):
             train(self.options(checkpoint, epochs=5, patience=2, calibration_every=99))
-        self.assertEqual(phases, [True, False, True, False, True])
+        self.assertEqual(phases, [True, False, False, False, True])
         best = torch.load(checkpoint, weights_only=True)
         latest = torch.load(self.root / "periodic.last.pt", weights_only=True)
         self.assertEqual(best["epoch"], 3)
@@ -250,13 +250,13 @@ class MultiResolutionTest(unittest.TestCase):
         rows = [json.loads(line) for line in checkpoint.with_suffix(".history.jsonl").read_text().splitlines()]
         self.assertEqual(len(rows), 5)
         self.assertEqual(rows[1]["calibration_search"], "current")
-        self.assertEqual(rows[2]["calibration_search"], "full")
+        self.assertEqual(rows[2]["calibration_search"], "current")
         self.assertTrue(all(row["train_seconds"] >= 0 and row["validation_seconds"] >= 0 for row in rows))
 
     def test_calibration_schedule_survives_resume_without_resetting_best_or_optimizer(self):
         def fake_score(model, *args, threshold_configs, **kwargs):
             chosen = threshold_configs[0]
-            return {"loss": 0.1, "f1": 0.5, "note_f1": 0.5, "note_f_avg": 0.5,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": 0.5, "note_f1": 0.5, "note_f_avg": 0.5,
                     "onset_f1": 0.5, "precision": 0.5, "recall": 0.5,
                     "threshold": chosen.frame, "thresholds": chosen.to_dict(), "threshold_curve": []}
         checkpoint = self.root / "resume-periodic.pt"
@@ -288,7 +288,7 @@ class MultiResolutionTest(unittest.TestCase):
         def fake_score(model, *args, threshold_configs, **kwargs):
             counts.append(len(threshold_configs))
             chosen = threshold_configs[0]
-            return {"loss": 0.1, "f1": 0.5, "note_f1": 0.5, "note_f_avg": 0.5,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": 0.5, "note_f1": 0.5, "note_f_avg": 0.5,
                     "onset_f1": 0.5, "precision": 0.5, "recall": 0.5,
                     "threshold": chosen.frame, "thresholds": chosen.to_dict(), "threshold_curve": []}
         with patch("piano_ml.training.score", side_effect=fake_score), redirect_stdout(io.StringIO()):

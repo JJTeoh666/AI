@@ -37,6 +37,9 @@ def predict(args: argparse.Namespace) -> None:
 
 
 def download(args):
+    if args.train_only and (args.additional_gb is None or args.bass_gb is not None
+                            or args.validation_total is not None):
+        raise ValueError("Use --train-only with --additional-gb.")
     if args.bass_gb is not None:
         if args.additional_gb is not None or args.validation_total is not None:
             raise ValueError("Choose only one of --bass-gb, --additional-gb or --validation-total.")
@@ -46,7 +49,8 @@ def download(args):
             raise ValueError("Choose --validation-total or --additional-gb.")
         return download_validation(args.data, args.validation_total, args.validation_budget_gb, args.seed)
     if args.additional_gb is not None:
-        return download_additional(args.data, args.additional_gb, seed=args.seed)
+        return download_additional(args.data, args.additional_gb, seed=args.seed,
+                                   dry_run=args.dry_run, train_only=args.train_only)
     return download_subset(args.data, {"train": args.train, "validation": args.validation, "test": args.test})
 
 
@@ -61,8 +65,9 @@ def main() -> None:
     dl.add_argument("--validation", type=int, default=2)
     dl.add_argument("--test", type=int, default=2)
     dl.add_argument("--additional-gb", type=float, help="Add this many GB of usable files using a random, size-limited selection")
+    dl.add_argument("--train-only", action="store_true", help="With --additional-gb, spend the entire budget on official training pairs")
     dl.add_argument("--bass-gb", type=float, help="Add this many GB of official training pairs ranked by rare bass-note coverage")
-    dl.add_argument("--dry-run", action="store_true", help="With --bass-gb, index MIDI and save a plan without downloading audio")
+    dl.add_argument("--dry-run", action="store_true", help="With --bass-gb or --additional-gb, save a plan without downloading files")
     dl.add_argument("--validation-total", type=int, help="Expand only the official validation split to this many local recordings")
     dl.add_argument("--validation-budget-gb", type=float, default=1.0, help="Additional validation download limit; default 1 GB")
     dl.add_argument("--seed", type=int, default=42)
@@ -115,7 +120,7 @@ def main() -> None:
     tr.add_argument("--epochs", type=int, default=10)
     tr.add_argument("--resume", help="Checkpoint to continue; --epochs is the number of additional epochs")
     tr.add_argument("--reset-optimizer", action="store_true", help="Resume weights with a fresh optimizer")
-    tr.add_argument("--reset-early-stopping", action="store_true", help="Resume with zero stale epochs while preserving the best-score target")
+    tr.add_argument("--reset-early-stopping", action="store_true", help="Legacy option: reset non-improvement and scheduler counts while preserving the best-score target")
     tr.add_argument("--batch-size", type=int, default=4)
     tr.add_argument("--seconds", type=float, default=4.0)
     tr.add_argument("--windows-per-file", type=int, default=32)
@@ -123,7 +128,7 @@ def main() -> None:
     tr.add_argument("--positive-weight", type=float, help="Frame loss positive weight; default 5 for onsets, 20 for frame")
     tr.add_argument("--event-weight", type=float, help="Onset/offset positive weight; defaults to 10")
     tr.add_argument("--lr", type=float, help="Default 0.0003 for onsets; resume preserves saved LR unless specified")
-    tr.add_argument("--patience", type=int, default=20, help="Stop after this many consecutive epochs without validation score improvement; default 20, 0 disables stopping")
+    tr.add_argument("--patience", type=int, default=0, help="Legacy compatibility option; ignored. Training runs all requested epochs")
     tr.add_argument("--lr-patience", type=int, default=3)
     tr.add_argument("--selection-metric", choices=("auto", "f1", "onset_f1", "note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123"), default="auto",
                     help="Auto selects macro pitch mean(F0,F1,F2,F3) for v8, macro mean(F0,F3) for v7, mean note F0..F4 for older onset models, or frame F1")

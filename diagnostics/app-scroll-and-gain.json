@@ -1,0 +1,11 @@
+{
+  "minimum_window": "900x650",
+  "default_staff_height": 750,
+  "zoom_200_staff_height": 1200,
+  "main_content_scrolls": true,
+  "playback_stays_visible": true,
+  "staff_page_navigation": true,
+  "volume_default_percent": 50,
+  "gain_default_db": 0,
+  "gain_slider_updates_player": true
+}

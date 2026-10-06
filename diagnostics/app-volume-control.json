@@ -1,0 +1,8 @@
+{
+  "minimum_window": "900x650",
+  "controls_fit": true,
+  "slider_label_and_live_gain": true,
+  "original_and_cached_result_playback": true,
+  "stop": true,
+  "playback_tests_passed": 5
+}

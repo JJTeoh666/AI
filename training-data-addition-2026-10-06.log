@@ -1,0 +1,39 @@
+Reading sizes from the official audio and MIDI archive indexes�
+Plan: 12 recordings {'train': 12, 'validation': 0, 'test': 0}; 0.991 GB additional files, approximately 0.833 GB transfer
+[1/12] train 2014/MIDI-UNPROCESSED_14-15_R1_2014_MID--AUDIO_15_R1_2014_wav--1.wav (93.3 MB)
+[1/12] train 2014/MIDI-UNPROCESSED_14-15_R1_2014_MID--AUDIO_15_R1_2014_wav--1.midi (0.0 MB)
+Completed 93.4/991.4 MB
+[2/12] train 2014/MIDI-UNPROCESSED_11-13_R1_2014_MID--AUDIO_12_R1_2014_wav--2.wav (92.7 MB)
+[2/12] train 2014/MIDI-UNPROCESSED_11-13_R1_2014_MID--AUDIO_12_R1_2014_wav--2.midi (0.1 MB)
+Completed 186.1/991.4 MB
+[3/12] train 2004/MIDI-Unprocessed_XP_16_R2_2004_01_ORIG_MID--AUDIO_16_R2_2004_04_Track04_wav.wav (86.5 MB)
+[3/12] train 2004/MIDI-Unprocessed_XP_16_R2_2004_01_ORIG_MID--AUDIO_16_R2_2004_04_Track04_wav.midi (0.1 MB)
+Completed 272.7/991.4 MB
+[4/12] train 2014/MIDI-UNPROCESSED_21-22_R1_2014_MID--AUDIO_21_R1_2014_wav--7.wav (95.3 MB)
+[4/12] train 2014/MIDI-UNPROCESSED_21-22_R1_2014_MID--AUDIO_21_R1_2014_wav--7.midi (0.0 MB)
+Completed 368.0/991.4 MB
+[5/12] train 2009/MIDI-Unprocessed_12_R2_2009_01_ORIG_MID--AUDIO_12_R2_2009_12_R2_2009_04_WAV.wav (99.2 MB)
+[5/12] train 2009/MIDI-Unprocessed_12_R2_2009_01_ORIG_MID--AUDIO_12_R2_2009_12_R2_2009_04_WAV.midi (0.1 MB)
+Completed 467.3/991.4 MB
+[6/12] train 2004/MIDI-Unprocessed_XP_22_R2_2004_01_ORIG_MID--AUDIO_22_R2_2004_01_Track01_wav.wav (81.8 MB)
+[6/12] train 2004/MIDI-Unprocessed_XP_22_R2_2004_01_ORIG_MID--AUDIO_22_R2_2004_01_Track01_wav.midi (0.1 MB)
+Completed 549.2/991.4 MB
+[7/12] train 2008/MIDI-Unprocessed_15_R1_2008_01-04_ORIG_MID--AUDIO_15_R1_2008_wav--2.wav (85.2 MB)
+[7/12] train 2008/MIDI-Unprocessed_15_R1_2008_01-04_ORIG_MID--AUDIO_15_R1_2008_wav--2.midi (0.1 MB)
+Completed 634.5/991.4 MB
+[8/12] train 2013/ORIG-MIDI_01_7_10_13_Group_MID--AUDIO_08_R3_2013_wav--3.wav (90.3 MB)
+[8/12] train 2013/ORIG-MIDI_01_7_10_13_Group_MID--AUDIO_08_R3_2013_wav--3.midi (0.1 MB)
+Completed 724.9/991.4 MB
+[9/12] train 2006/MIDI-Unprocessed_18_R1_2006_01-05_ORIG_MID--AUDIO_18_R1_2006_03_Track03_wav.wav (90.9 MB)
+[9/12] train 2006/MIDI-Unprocessed_18_R1_2006_01-05_ORIG_MID--AUDIO_18_R1_2006_03_Track03_wav.midi (0.1 MB)
+Completed 815.9/991.4 MB
+[10/12] train 2004/MIDI-Unprocessed_SMF_12_01_2004_01-05_ORIG_MID--AUDIO_12_R1_2004_07_Track07_wav.wav (97.5 MB)
+[10/12] train 2004/MIDI-Unprocessed_SMF_12_01_2004_01-05_ORIG_MID--AUDIO_12_R1_2004_07_Track07_wav.midi (0.1 MB)
+Completed 913.4/991.4 MB
+[11/12] train 2015/MIDI-Unprocessed_R1_D2-13-20_mid--AUDIO-from_mp3_19_R1_2015_wav--4.wav (38.7 MB)
+[11/12] train 2015/MIDI-Unprocessed_R1_D2-13-20_mid--AUDIO-from_mp3_19_R1_2015_wav--4.midi (0.0 MB)
+Completed 952.1/991.4 MB
+[12/12] train 2006/MIDI-Unprocessed_24_R1_2006_01-05_ORIG_MID--AUDIO_24_R1_2006_04_Track04_wav.wav (39.3 MB)
+[12/12] train 2006/MIDI-Unprocessed_24_R1_2006_01-05_ORIG_MID--AUDIO_24_R1_2006_04_Track04_wav.midi (0.0 MB)
+Completed 991.4/991.4 MB
+Ready: added 0.991 GB in 12 paired recordings to data\maestro

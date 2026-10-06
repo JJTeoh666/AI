@@ -173,7 +173,7 @@ class V7Test(unittest.TestCase):
         self.assertEqual(saved["model_config"]["architecture"], "onsets-multires-balanced")
         self.assertEqual(saved["format_version"], 8)
         self.assertEqual(saved["selection_metric"], "note_macro_f03")
-        self.assertEqual(saved["training_config"]["patience"], 20)
+        self.assertEqual(saved["training_config"]["patience"], 0)
         self.assertEqual(saved["training_config"]["threshold_calibration"], "training")
         self.assertEqual(saved["training_config"]["threshold_objective"], "pitch_f03")
         for key, value in (("bass_sampling", 0.3), ("treble_sampling", 0.3), ("edge_loss_weight", 2)):
@@ -208,7 +208,7 @@ class V7Test(unittest.TestCase):
         self.assertIn("f0", rows[0])
         self.assertIn("f3", rows[0])
 
-    def test_checkpoint_and_twenty_epoch_stop_follow_f03_when_f1_improves(self):
+    def test_checkpoint_follows_f03_and_training_continues_when_f1_improves(self):
         path = self.root / "selection.pt"
         calls = []
         def scores(model, *args, selection_metric, threshold_configs, **kwargs):
@@ -217,7 +217,7 @@ class V7Test(unittest.TestCase):
             calls.append(model.learned_thresholds())
             f03 = 0.6 if len(calls) == 1 else 0.5
             f1 = 0.1 + len(calls) * 0.01
-            return {"loss": 0.1, "f1": f1, "note_f1": f1, "note_f_avg": f1,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": f1, "note_f1": f1, "note_f_avg": f1,
                     "note_macro_f03": f03, "note_macro_f0": f03, "note_macro_f3": f03,
                     "onset_f1": f1, "precision": f1, "recall": f1,
                     "threshold": calls[-1].frame, "thresholds": calls[-1].to_dict()}
@@ -227,8 +227,8 @@ class V7Test(unittest.TestCase):
         latest = torch.load(self.root / "selection.last.pt", weights_only=True)
         self.assertEqual(best["epoch"], 1)
         self.assertEqual(best["best_score"], 0.6)
-        self.assertEqual(latest["epoch"], 21)
-        self.assertEqual(latest["stale_epochs"], 20)
+        self.assertEqual(latest["epoch"], 25)
+        self.assertEqual(latest["stale_epochs"], 24)
         self.assertGreater(latest["validation"]["note_f1"], best["validation"]["note_f1"])
 
     def test_cli_v7_and_reject_discrete_calibration(self):

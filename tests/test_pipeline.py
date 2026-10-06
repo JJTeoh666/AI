@@ -104,6 +104,10 @@ class PipelineTest(unittest.TestCase):
         saved = torch.load(latest, weights_only=True)
         self.assertEqual(saved["epoch"], 1)
         self.assertIn("optimizer", saved)
+        parts = saved["training_metrics"]["loss_components"]
+        self.assertAlmostEqual(parts["frame"], saved["training_metrics"]["total_loss"], places=6)
+        self.assertTrue(all(value == 0 for name, value in parts.items() if name != "frame"))
+        self.assertIn("frame_bce", saved["validation"])
         initial_step = next(iter(saved["optimizer"]["state"].values()))["step"].item()
         options.resume = str(latest)
         options.lr = 3e-4
@@ -391,7 +395,7 @@ class PipelineTest(unittest.TestCase):
         def decreasing_score(model, *args, **kwargs):
             value = next(scores)
             thresholds = model.learned_thresholds()
-            return {"loss": 0.1, "f1": value, "onset_f1": value, "note_f1": value, "note_f_avg": value,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": value, "onset_f1": value, "note_f1": value, "note_f_avg": value,
                     "precision": value, "recall": value, "threshold": thresholds.summary()["frame"],
                     "thresholds": thresholds.to_dict(), "threshold_curve": []}
         with patch("piano_ml.training.score", side_effect=decreasing_score):
@@ -550,7 +554,7 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(all(isinstance(value, float) for value in saved["thresholds"].values()))
         self.assertEqual(saved["training_config"]["seed"], 123456)
         self.assertEqual(saved["selection_metric"], "note_f_avg")
-        self.assertEqual(saved["training_config"]["patience"], 20)
+        self.assertEqual(saved["training_config"]["patience"], 0)
         self.assertIn("note_f_avg=", output)
         self.assertIn("stale_epochs=", output)
         self.assertIn("note_macro_f1=", output)
@@ -687,24 +691,29 @@ class PipelineTest(unittest.TestCase):
         self.assertLess(average["note_f1"], f1["note_f1"])
         self.assertGreater(average["note_f_avg"], f1["note_f_avg"])
 
-    def test_cli_defaults_to_twenty_unimproved_epochs(self):
+    def test_cli_defaults_to_no_early_stopping(self):
         with patch("sys.argv", ["piano_ml", "train"]), patch("piano_ml.__main__.train") as run:
             cli_main()
         options = run.call_args.args[0]
-        self.assertEqual(options.patience, 20)
+        self.assertEqual(options.patience, 0)
         self.assertEqual(options.selection_metric, "auto")
+        with patch("sys.argv", ["piano_ml", "train", "--patience", "20", "--reset-early-stopping"]), \
+             patch("piano_ml.__main__.train") as run:
+            cli_main()
+        self.assertEqual(run.call_args.args[0].patience, 20)
+        self.assertTrue(run.call_args.args[0].reset_early_stopping)
 
-    def test_average_selection_and_twenty_epoch_stop_reset_on_improvement(self):
+    def test_average_selection_preserves_best_and_completes_all_requested_epochs(self):
         checkpoint = self.root / "mean-selection.pt"
         options = Namespace(data=str(self.root), output=str(checkpoint), epochs=45,
                             batch_size=1, seconds=0.2, windows_per_file=1, max_files=None,
                             positive_weight=5.0, lr=1e-3, seed=42, workers=0, device="cpu",
                             resume=None, architecture="onsets", hidden_size=16, gru_layers=1,
                             augment=False, lr_patience=100)
-        values = iter([0.6] + [0.5] * 19 + [0.65] + [0.64] * 20)
+        values = iter([0.6] + [0.5] * 19 + [0.65] + [0.64] * 24)
         def fake_score(*args, **kwargs):
             value = next(values)
-            return {"loss": 0.1, "f1": 1 - value, "onset_f1": 1 - value,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": 1 - value, "onset_f1": 1 - value,
                     "note_f1": 1 - value, "note_f_avg": value, "precision": 0.5,
                     "recall": 0.5, "threshold": 0.5, "threshold_curve": []}
         console = io.StringIO()
@@ -715,12 +724,14 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(best["epoch"], 21)
         self.assertEqual(best["best_score"], 0.65)
         self.assertEqual(best["selection_metric"], "note_f_avg")
-        self.assertEqual(latest["epoch"], 41)
-        self.assertEqual(latest["stale_epochs"], 20)
-        self.assertIn("20 epochs without improvement in note_f_avg", console.getvalue())
+        self.assertEqual(latest["epoch"], 45)
+        self.assertEqual(latest["stale_epochs"], 24)
+        self.assertNotIn("Early stopping after", console.getvalue())
         history = [json.loads(line) for line in checkpoint.with_suffix(".history.jsonl").read_text().splitlines()]
         self.assertEqual(history[20]["stale_epochs"], 0)
-        self.assertEqual(history[-1]["patience"], 20)
+        self.assertEqual(len(history), 45)
+        self.assertEqual(history[-1]["patience"], 0)
+        self.assertFalse(history[-1]["early_stopping"])
 
     def test_resume_old_f1_checkpoint_restarts_comparison_using_average(self):
         model = GlobalRecurrentPianoNet(hidden_size=16, gru_layers=1)
@@ -734,7 +745,7 @@ class PipelineTest(unittest.TestCase):
                             resume=str(checkpoint), architecture="auto", augment=False)
         def fake_score(current, *args, **kwargs):
             thresholds = current.learned_thresholds()
-            return {"loss": 0.1, "f1": 0.9, "onset_f1": 0.9, "note_f1": 0.9,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": 0.9, "onset_f1": 0.9, "note_f1": 0.9,
                     "note_f_avg": 0.6, "precision": 0.9, "recall": 0.9,
                     "threshold": thresholds.frame, "thresholds": thresholds.to_dict(), "threshold_curve": []}
         console = io.StringIO()
@@ -747,7 +758,7 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(best["best_score"], 0.6)
         self.assertEqual(latest["stale_epochs"], 1)
         self.assertEqual(latest["selection_metric"], "note_f_avg")
-        self.assertIn("resetting best-score comparison and early-stopping count", console.getvalue())
+        self.assertIn("resetting best-score comparison and non-improvement count", console.getvalue())
 
     def test_v2_transfer_training_resume_scheduler_and_calibration(self):
         legacy = self.root / "legacy.pt"
@@ -761,15 +772,15 @@ class PipelineTest(unittest.TestCase):
                             hidden_size=16, gru_layers=1, patience=2, lr_patience=0,
                             thresholds=[0.5], augment=False)
         def fake_score(value):
-            return {"loss": 0.1, "f1": value, "onset_f1": value, "note_f1": value, "note_f_avg": value,
+            return {"loss": 0.1, "frame_bce": 0.1, "f1": value, "onset_f1": value, "note_f1": value, "note_f_avg": value,
                     "precision": value, "recall": value, "threshold": 0.5, "threshold_curve": []}
-        with patch("piano_ml.training.score", side_effect=[fake_score(0.5), fake_score(0.4), fake_score(0.3)]):
+        with patch("piano_ml.training.score", side_effect=[fake_score(0.5), fake_score(0.4)] + [fake_score(0.3)] * 4):
             train(options)
         latest = self.root / "v2.last.pt"
         saved = torch.load(latest, weights_only=True)
-        self.assertEqual(saved["epoch"], 3)
-        self.assertEqual(saved["stale_epochs"], 2)
-        self.assertAlmostEqual(saved["optimizer"]["param_groups"][0]["lr"], 0.00025)
+        self.assertEqual(saved["epoch"], 6)
+        self.assertEqual(saved["stale_epochs"], 5)
+        self.assertAlmostEqual(saved["optimizer"]["param_groups"][0]["lr"], 0.00003125)
         self.assertEqual(saved["selection_metric"], "note_f_avg")
         model = load_model(checkpoint, torch.device("cpu"))
         self.assertIsInstance(model, OnsetsPianoNet)
@@ -780,9 +791,9 @@ class PipelineTest(unittest.TestCase):
         with patch("piano_ml.training.score", return_value=fake_score(0.6)):
             train(options)
         resumed = torch.load(latest, weights_only=True)
-        self.assertEqual(resumed["epoch"], 4)
-        self.assertAlmostEqual(resumed["optimizer"]["param_groups"][0]["lr"], 0.00025)
-        self.assertEqual(resumed["scheduler"]["last_epoch"], 4)
+        self.assertEqual(resumed["epoch"], 7)
+        self.assertAlmostEqual(resumed["optimizer"]["param_groups"][0]["lr"], 0.00003125)
+        self.assertEqual(resumed["scheduler"]["last_epoch"], 7)
         calibrated = self.root / "calibrated.pt"
         evaluation = Namespace(data=str(self.root), checkpoint=str(checkpoint), split="validation",
                                thresholds=[0.35, 0.65], threshold=None, selection_metric="note_f1",

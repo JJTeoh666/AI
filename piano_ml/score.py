@@ -11,6 +11,8 @@ from matplotlib.path import Path
 from matplotlib.textpath import TextPath
 from matplotlib.transforms import Affine2D
 
+from .plot_fonts import plot_font_families
+
 DEGREES = (0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6)
 SHARPS = (1, 3, 6, 8, 10)
 
@@ -149,19 +151,22 @@ def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
             axis.add_patch(Arc((x - 0.15, y - 0.55), 0.30, 0.45,
                                theta1=190, theta2=350, color="#667085", linewidth=0.8))
         if names:
-            axis.text(x, y - 1.0, note["name"], ha="center", fontsize=7, color="#126b60")
+            axis.text(x, y - 1.0, note["name"], ha="center", fontsize=7, color="#126b60",
+                      fontfamily=plot_font_families())
     for chord in result["chords"]:
         if start <= chord["start"] < end:
             axis.text((chord["start"] - start) * bpm / 60 + 0.2, 6.6,
-                      chord["name"], fontsize=8, color="#126b60", clip_on=True)
+                      chord["name"], fontsize=8, color="#126b60", clip_on=True,
+                      fontfamily=plot_font_families())
     axis.set_xticks(range(0, beats_per_page + 1))
     axis.set_xticklabels([f"{start + beat * 60 / bpm:.2f}" for beat in range(beats_per_page + 1)], fontsize=8)
-    axis.set_xlabel("Time (seconds); note spacing and durations approximated at the selected tempo", fontsize=9, color="#667085")
+    axis.set_xlabel("Time (seconds); note spacing and durations approximated at the selected tempo",
+                    fontsize=9, color="#667085", wrap=True)
     axis.set_yticks([])
     for spine in axis.spines.values():
         spine.set_visible(False)
     axis.tick_params(axis="x", length=0)
     figure.suptitle(f"Piano transcription   ·   {bpm:g} BPM   ·   Page {page + 1}/{pages}   ·   {start:.2f}–{end:.2f} s",
-                    fontsize=12, color="#17243b")
+                    fontsize=12, color="#17243b", wrap=True)
     figure.subplots_adjust(left=0.03, right=0.98, bottom=0.12, top=0.89)
     return axis, page, pages, (start, start + seconds_per_page)
