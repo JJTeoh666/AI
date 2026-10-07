@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import math
+import os
 import tempfile
 import unittest
 import wave
@@ -21,7 +22,9 @@ from piano_ml.metrics import pitch_note_report
 from piano_ml.model import (BalancedPianoNet, FourierAnalysisLayer, FourierMixing, FourierRecurrentPianoNet,
                             FourierTemporalBlock, build_model, default_selection_metric)
 from piano_ml.thresholds import Thresholds
-from piano_ml.training import pitch_loss_weights, train, training_loss
+from piano_ml.training import pitch_loss_weights, train, training_loss, training_loss_components, score
+from piano_ml.data import MaestroWindows
+from piano_ml.learned_thresholds import PitchFourScoreThresholds
 
 
 class FourierModelTest(unittest.TestCase):
@@ -99,7 +102,8 @@ class FourierModelTest(unittest.TestCase):
             self.assertGreater(float(parameter.grad.abs().sum()), 0)
         self.assertEqual(model.threshold_module.betas, (0, 1, 2, 3))
         self.assertFalse(model.learned_thresholds().pitch_dependent)
-        self.assertEqual(default_selection_metric(model.architecture), "note_macro_f0123")
+        self.assertEqual(default_selection_metric(model.architecture), "avgf_loss")
+        self.assertEqual(default_selection_metric(model.architecture, "8"), "note_macro_f0123")
         self.assertEqual(default_selection_metric(BalancedPianoNet.architecture), "note_macro_f03")
 
     def test_macro_four_scores_give_each_supported_key_equal_weight(self):
@@ -172,27 +176,32 @@ class V8PipelineTest(unittest.TestCase):
         latest = self.root / "v8.last.pt"
         saved = torch.load(latest, weights_only=True)
         self.assertEqual(saved["format_version"], 9)
+        self.assertEqual(saved["model_version"], "8.1")
+        self.assertEqual(saved["training_config"]["model_version"], "8.1")
         self.assertEqual(saved["model_config"]["architecture"], "onsets-fourier-recurrent")
-        self.assertEqual(saved["selection_metric"], "note_macro_f0123")
+        self.assertEqual(saved["selection_metric"], "avgf_loss")
+        self.assertEqual(saved["selection_mode"], "min")
         self.assertEqual(saved["training_config"]["threshold_objective"], "pitch_f0123")
         self.assertEqual(saved["training_config"]["threshold_calibration"], "training")
         self.assertEqual(saved["training_config"]["patience"], 0)
         self.assertFalse(saved["training_config"]["early_stopping"])
-        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0.6),
+        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0),
                            ("middle_min_note", 30), ("middle_max_note", 68),
-                           ("middle_loss_weight", 2), ("edge_loss_weight", 1)):
+                           ("middle_loss_weight", 1), ("edge_loss_weight", 1)):
             self.assertEqual(saved["training_config"][key], value)
         self.assertEqual(saved["validation"]["calibration_candidates"], 1)
         self.assertEqual(saved["validation"]["calibration_search"], "parameters")
         history_path = checkpoint.with_suffix(".history.jsonl")
         original_history = history_path.read_text()
         history = json.loads(original_history.strip())
+        self.assertEqual(history["model_version"], "8.1")
         self.assertEqual(saved["training_metrics"]["total_loss"], history["train_loss"])
         self.assertEqual(saved["training_metrics"]["frame_bce"], history["train_frame_bce"])
         self.assertEqual(saved["training_metrics"]["loss_components"], history["train_loss_components"])
         self.assertAlmostEqual(sum(history["train_loss_components"].values()), history["train_loss"], places=6)
         self.assertIn("frame_bce", saved["validation"])
         loaded = load_model(latest, torch.device("cpu"))
+        self.assertEqual(loaded.model_version, "8.1")
         recreated = build_model(saved["model_config"]).eval()
         recreated.load_state_dict(saved["model"])
         audio = torch.randn(1, 16320) * 0.1
@@ -202,21 +211,25 @@ class V8PipelineTest(unittest.TestCase):
             self.assertTrue(torch.equal(before[head], after[head]))
         # Mimic an older checkpoint without reporting fields, retaining its comparison state.
         saved.pop("training_metrics")
+        saved.pop("model_version")
+        saved["training_config"].pop("model_version")
         saved["validation"].pop("frame_bce")
-        for key in ("middle_sampling", "middle_min_note", "middle_max_note", "middle_loss_weight"):
+        for key in ("middle_sampling", "middle_min_note", "middle_max_note", "middle_loss_weight", "pitch_emphasis_version"):
             saved["training_config"].pop(key)
         saved["training_config"].update(bass_sampling=0.3, treble_sampling=0.3, edge_loss_weight=2)
         torch.save(saved, latest)
+        self.assertEqual(load_model(latest, torch.device("cpu")).model_version, "8")
         with redirect_stdout(io.StringIO()):
             train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
                                feature_width=None, fourier_modes=None, fourier_layers=None))
         resumed = torch.load(latest, weights_only=True)
         self.assertEqual(resumed["epoch"], 2)
+        self.assertEqual(resumed["model_version"], "8.1")
         self.assertEqual(resumed["validation_signature"], saved["validation_signature"])
         self.assertEqual(resumed["model_config"], saved["model_config"])
-        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0.6),
+        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0),
                            ("middle_min_note", 30), ("middle_max_note", 68),
-                           ("middle_loss_weight", 2), ("edge_loss_weight", 1)):
+                           ("middle_loss_weight", 1), ("edge_loss_weight", 1)):
             self.assertEqual(resumed["training_config"][key], value)
         self.assertIn("frame_bce", resumed["validation"])
         self.assertIn("training_metrics", resumed)
@@ -227,10 +240,34 @@ class V8PipelineTest(unittest.TestCase):
         self.assertFalse(torch.equal(saved["model"]["threshold_module.raw"], resumed["model"]["threshold_module.raw"]))
         result = transcribe_audio(self.root / "test.wav", latest, device="cpu")
         self.assertEqual(result["architecture"], "onsets-fourier-recurrent")
+        self.assertEqual(result["model_version"], "8.1")
         self.assertEqual(len(result["thresholds"]), 3)
         self.assertNotIn("register_thresholds", result)
 
-    def test_custom_middle_emphasis_is_restored_on_resume(self):
+    def test_auto_output_uses_v81_names_and_reports_version(self):
+        previous_directory = Path.cwd()
+        console = io.StringIO()
+        args = self.options(None)
+        args.output = None
+        try:
+            os.chdir(self.root)
+            with redirect_stdout(console):
+                train(args)
+        finally:
+            os.chdir(previous_directory)
+        best = self.root / "checkpoints/piano-v8.1.pt"
+        latest = self.root / "checkpoints/piano-v8.1.last.pt"
+        history = self.root / "checkpoints/piano-v8.1.history.jsonl"
+        for path in (best, latest):
+            saved = torch.load(path, weights_only=True)
+            self.assertEqual(saved["model_version"], "8.1")
+            self.assertEqual(saved["format_version"], 9)
+            self.assertEqual(saved["selection_metric"], "avgf_loss")
+        self.assertEqual(json.loads(history.read_text())["model_version"], "8.1")
+        self.assertIn("Training V8.1 onsets-fourier-recurrent", console.getvalue())
+        self.assertFalse((self.root / "checkpoints/piano-v8.pt").exists())
+
+    def test_explicit_pitch_emphasis_is_restored_after_uniform_migration(self):
         checkpoint = self.root / "custom.pt"
         settings = dict(middle_sampling=0.5, middle_min_note=35, middle_max_note=65,
                         middle_loss_weight=3, bass_sampling=0.1, treble_sampling=0.1, edge_loss_weight=1.5)
@@ -243,6 +280,46 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(saved["epoch"], 2)
         for key, value in settings.items():
             self.assertEqual(saved["training_config"][key], value)
+
+    def test_resume_middle_focused_checkpoint_uses_uniform_sampling_and_both_objectives(self):
+        checkpoint = self.root / "focused.pt"
+        with redirect_stdout(io.StringIO()):
+            train(self.options(checkpoint, middle_sampling=0.6, middle_loss_weight=2))
+        latest = self.root / "focused.last.pt"
+        saved = torch.load(latest, weights_only=True)
+        saved["training_config"].pop("pitch_emphasis_version")  # Previous middle-focused trainer.
+        torch.save(saved, latest)
+        datasets, threshold_weights = [], []
+        original_threshold_loss = PitchFourScoreThresholds.loss
+        def dataset(*args, **kwargs):
+            result = MaestroWindows(*args, **kwargs)
+            datasets.append(result)
+            return result
+        def threshold_loss(module, *args, **kwargs):
+            threshold_weights.append(kwargs.get("pitch_weights"))
+            return original_threshold_loss(module, *args, **kwargs)
+        console = io.StringIO()
+        with patch("piano_ml.training.MaestroWindows", side_effect=dataset), \
+                patch("piano_ml.training.training_loss_components", wraps=training_loss_components) as objective, \
+                patch.object(PitchFourScoreThresholds, "loss", new=threshold_loss), redirect_stdout(console):
+            train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
+                               feature_width=None, fourier_modes=None, fourier_layers=None))
+        resumed = torch.load(latest, weights_only=True)
+        self.assertEqual(resumed["epoch"], 2)
+        self.assertEqual(resumed["validation_signature"], saved["validation_signature"])
+        self.assertEqual(resumed["selection_metric"], "avgf_loss")
+        for name in ("bass_sampling", "middle_sampling", "treble_sampling"):
+            self.assertEqual(resumed["training_config"][name], 0)
+            self.assertEqual(getattr(datasets[0], name), 0)
+        for name in ("middle_loss_weight", "edge_loss_weight"):
+            self.assertEqual(resumed["training_config"][name], 1)
+        self.assertEqual(resumed["training_config"]["pitch_emphasis_version"], 2)
+        self.assertEqual(datasets[0].middle_anchors, [])
+        self.assertEqual(objective.call_count, 1)
+        self.assertIsNone(objective.call_args.args[-1])
+        self.assertEqual(threshold_weights, [None])
+        self.assertIn("Cleared saved pitch emphasis", console.getvalue())
+        self.assertIn("Equal error weights for all 88 piano keys", console.getvalue())
 
     def test_weighted_and_frozen_threshold_reporting_uses_existing_forward_passes(self):
         original_forward = FourierRecurrentPianoNet.forward
@@ -271,22 +348,22 @@ class V8PipelineTest(unittest.TestCase):
                     saved = torch.load(filename, weights_only=True)
                     self.assertEqual(saved["training_metrics"]["loss_components"], parts)
                     self.assertEqual(saved["training_metrics"]["frame_bce"], history["train_frame_bce"])
-                    self.assertEqual(saved["selection_metric"], "note_macro_f0123")
+                    self.assertEqual(saved["selection_metric"], "avgf_loss")
                 for field in ("train_total_loss=", "train_frame_bce=", "val_frame_bce=", "train_loss_components:"):
                     self.assertIn(field, console.getvalue())
 
-    def test_best_checkpoint_scheduler_and_all_epochs_follow_four_score_average(self):
+    def test_best_checkpoint_scheduler_and_all_epochs_minimize_validation_avgf_loss(self):
         checkpoint = self.root / "selection.pt"
         calls = []
         def scores(model, *args, selection_metric, threshold_configs, **kwargs):
-            self.assertEqual(selection_metric, "note_macro_f0123")
+            self.assertEqual(selection_metric, "avgf_loss")
             self.assertIsNone(threshold_configs)
             calls.append(model.learned_thresholds())
-            value = 0.65 if len(calls) == 1 else 0.6
+            value = 0.35 if len(calls) == 1 else 0.4
             other = 0.1 + len(calls) * 0.1
             return {"loss": 0.1, "frame_bce": 0.1, "f1": other, "note_f1": other, "note_f_avg": other,
                     "note_macro_f03": other, "note_macro_f0": other, "note_macro_f2": other,
-                    "note_macro_f3": other, "note_macro_f0123": value,
+                    "note_macro_f3": other, "note_macro_f0123": other, "avgf_loss": value,
                     "onset_f1": other, "precision": other, "recall": other,
                     "threshold": calls[-1].frame, "thresholds": calls[-1].to_dict()}
         console = io.StringIO()
@@ -295,7 +372,9 @@ class V8PipelineTest(unittest.TestCase):
         best = torch.load(checkpoint, weights_only=True)
         latest = torch.load(self.root / "selection.last.pt", weights_only=True)
         self.assertEqual(best["epoch"], 1)
-        self.assertEqual(best["best_score"], 0.65)
+        self.assertEqual(best["best_score"], 0.35)
+        self.assertEqual(latest["scheduler"]["mode"], "min")
+        self.assertEqual(latest["selection_mode"], "min")
         self.assertEqual(latest["epoch"], 5)
         self.assertEqual(latest["stale_epochs"], 4)
         self.assertFalse(latest["training_config"]["early_stopping"])
@@ -303,6 +382,7 @@ class V8PipelineTest(unittest.TestCase):
         self.assertNotIn("Early stopping after", console.getvalue())
         self.assertLess(latest["optimizer"]["param_groups"][0]["lr"], 1e-3)
         self.assertGreater(latest["validation"]["note_macro_f03"], best["validation"]["note_macro_f03"])
+        self.assertGreater(latest["validation"]["note_macro_f0123"], best["validation"]["note_macro_f0123"])
 
         # An old stopped checkpoint must still complete every additional epoch.
         latest["stale_epochs"] = 20
@@ -321,6 +401,39 @@ class V8PipelineTest(unittest.TestCase):
         self.assertFalse(resumed["training_config"]["early_stopping"])
         self.assertEqual(resumed["training_config"]["patience"], 0)
 
+    def test_v8_score_migration_resets_max_scheduler_and_best_target(self):
+        checkpoint = self.root / "migration.pt"
+        with redirect_stdout(io.StringIO()):
+            train(self.options(checkpoint))
+        latest = self.root / "migration.last.pt"
+        saved = torch.load(latest, weights_only=True)
+        saved.pop("model_version")
+        saved["selection_metric"] = "note_macro_f0123"
+        saved["validation_signature"] = "old-note-score-signature"
+        saved["best_score"] = 0.99
+        saved["scheduler"]["mode"] = "max"
+        saved["scheduler"]["best"] = 0.99
+        torch.save(saved, latest)
+        losses = iter((0.3, 0.4))  # Starting checkpoint is better than the next epoch.
+        def score_with_loss(*args, **kwargs):
+            result = score(*args, **kwargs)
+            result["avgf_loss"] = next(losses)
+            return result
+        with patch("piano_ml.training.score", side_effect=score_with_loss), redirect_stdout(io.StringIO()):
+            train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
+                               feature_width=None, fourier_modes=None, fourier_layers=None))
+        best = torch.load(checkpoint, weights_only=True)
+        resumed = torch.load(latest, weights_only=True)
+        self.assertEqual(best["best_score"], 0.3)
+        self.assertEqual(best["epoch"], 1)
+        self.assertEqual(resumed["epoch"], 2)
+        self.assertEqual(resumed["scheduler"]["mode"], "min")
+        self.assertEqual(resumed["selection_metric"], "avgf_loss")
+        self.assertEqual(resumed["best_score"], 0.3)
+        self.assertEqual(resumed["stale_epochs"], 1)
+        parameter_id = resumed["optimizer"]["param_groups"][1]["params"][0]
+        self.assertEqual(float(resumed["optimizer"]["state"][parameter_id]["step"]), 2)
+
     def test_evaluation_csv_and_calibrated_copy_preserve_v8_format(self):
         model = FourierRecurrentPianoNet(feature_width=32, fourier_modes=3, fourier_layers=1,
                                          hidden_size=16, gru_layers=1)
@@ -335,12 +448,27 @@ class V8PipelineTest(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             report = evaluate(args)
         self.assertEqual(report["selection_metric"], "note_macro_f0123")
+        self.assertEqual(report["model_version"], "8")
         self.assertEqual(torch.load(self.root / "calibrated.pt", weights_only=True)["format_version"], 9)
+        self.assertEqual(load_model(self.root / "calibrated.pt", torch.device("cpu")).model_version, "8")
         self.assertAlmostEqual(load_model(self.root / "calibrated.pt", torch.device("cpu")).learned_thresholds().frame, 0.55)
         with (self.root / "report.pitches.csv").open(newline="") as handle:
             rows = list(csv.DictReader(handle))
         self.assertEqual(len(rows), 88)
         self.assertTrue(all(key in rows[0] for key in ("f0", "f1", "f2", "f3", "f0123", "in_macro_f0123")))
+        torch.save({"model": model.state_dict(), "model_config": model.config, "model_version": "8.1"}, source)
+        with redirect_stdout(io.StringIO()):
+            report = evaluate(args)
+        self.assertEqual(report["model_version"], "8.1")
+        self.assertEqual(report["selection_metric"], "avgf_loss")
+        self.assertEqual(report["selection_mode"], "min")
+        self.assertEqual(load_model(self.root / "calibrated.pt", torch.device("cpu")).model_version, "8.1")
+        args.full_recordings = True
+        with redirect_stdout(io.StringIO()):
+            full_report = evaluate(args)
+        self.assertEqual(full_report["mode"], "full_recordings")
+        self.assertEqual(full_report["selection_metric"], "avgf_loss")
+        self.assertTrue(math.isfinite(full_report["avgf_loss"]))
 
     def test_v8_cli_dimensions_and_incompatible_initialization(self):
         with patch("sys.argv", ["piano_ml", "train", "--architecture", "onsets-fourier-recurrent",

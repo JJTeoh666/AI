@@ -1,12 +1,14 @@
 # Older model versions and training history
 
-[Back to the README](../README.md) · [Current V8 structure](model-v8.md)
+[Back to the README](../README.md) · [Current V8.1 structure](model-v8.md)
 
-Use this reference to resume older checkpoints or reproduce earlier experiments. For new training, follow the V8 instructions in the README. Run commands from the project root.
+Use this reference to resume older checkpoints or reproduce earlier experiments. For new training, follow the V8.1 instructions in the README. Run commands from the project root.
 
-Dataset counts, test totals and trial scores below are historical snapshots from when each version was introduced. Check the README for the latest verified dataset inventory. The app currently prefers V8 when its checkpoint exists; choose older models explicitly in the Model dropdown.
+Dataset counts, test totals and trial scores below are historical snapshots from when each version was introduced. Check the README for the latest verified dataset inventory. The app currently prefers V8.1 when its checkpoint exists, then V8; choose older models explicitly in the Model dropdown.
 
 **Current training behavior:** early stopping has been removed for all versions. Commands below retain historical options for reference; `--patience` is accepted and ignored. Runs complete all requested epochs, and old stop counts cannot stop a resumed run. Best-checkpoint selection and learning rate scheduling still use each version's selection metric. `--reset-early-stopping` remains a compatibility option that clears diagnostic non-improvement and scheduler counts.
+
+All versions now default to ordinary random training windows and equal pitch weights for every piano key. Previous saved pitch emphasis is cleared on the first resume with this trainer. The focus settings described below are historical; commands containing explicit bass/treble/middle focus flags still enable those requested experiments. Use the [equal-note continuation command](../README.md#continue-training-with-equal-note-weights) for current defaults.
 
 ## Contents
 

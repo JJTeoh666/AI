@@ -16,14 +16,16 @@ from torch.utils.data import DataLoader
 from .data import MaestroWindows, collate_windows
 from .middle_data import FOCUS_LOW_NOTE, FOCUS_HIGH_NOTE
 from .calibration import Calibration
+from .avgf import avgf_accumulators
 from .inference import get_device
 from .thresholds import Thresholds, saved_thresholds, threshold_grid, requested_grid
 from .model import (N_NOTES, LOW_NOTE, HIGH_NOTE, SAMPLE_RATE, HOP_LENGTH, build_model,
-                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE,
+                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE, FOURIER_MODEL_VERSION,
                     BALANCED_ARCHITECTURES, RECURRENT_CONV_ARCHITECTURES,
                     MULTIRES_ARCHITECTURES, default_selection_metric, checkpoint_format_version)
 
 LOSS_COMPONENTS = ("frame", "onset", "offset", "release", "velocity", "pedal", "threshold")
+PITCH_EMPHASIS_VERSION = 2
 
 
 class _FrameBCEAccumulator:
@@ -79,13 +81,16 @@ def restore_rng(state: dict, device: torch.device) -> None:
 
 def score(model: nn.Module, loader: DataLoader, device: torch.device,
           thresholds=(0.5,), selection_metric="f1", min_note_seconds=None,
-          threshold_configs=None) -> dict:
+          threshold_configs=None, avgf_temperature=0.1, avgf_regularization=0.05) -> dict:
     """Calibrate on fixed validation windows, aggregating micro and pitch metrics."""
     model.eval()
     calibration = Calibration(threshold_configs if threshold_configs is not None else
                               [model.learned_thresholds()] if hasattr(model, "learned_thresholds") else
                               threshold_grid(Thresholds(), shared_values=thresholds), min_note_seconds,
                               release_frames=model_config(model).get("release_frames", 2))
+    avgf = avgf_accumulators(model, calibration.grid, avgf_temperature, avgf_regularization)
+    if selection_metric == "avgf_loss" and not avgf:
+        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
     frame_loss = _FrameBCEAccumulator()
     with torch.inference_mode():
         for waves, labels in loader:
@@ -95,6 +100,11 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
             output = output if isinstance(output, dict) else {"frame": output}
             frame_loss.add(output["frame"], truth.to(device))
             probabilities = {key: logits.sigmoid().cpu().numpy() for key, logits in output.items()}
+            if avgf:
+                if not isinstance(labels, dict) or any(head not in labels for head in ("frame", "onset", "offset")):
+                    raise ValueError("AvgF validation requires frame, onset and offset targets.")
+                for accumulator in avgf.values():
+                    accumulator.add(probabilities, {head: labels[head].numpy() for head in ("frame", "onset", "offset")})
             truth = truth.numpy() >= 0.5
             duration = waves.shape[1] / SAMPLE_RATE
             for index in range(len(waves)):
@@ -102,10 +112,10 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
                 calibration.add({key: value[index] for key, value in probabilities.items()},
                                 truth[index], reference, duration, window=True)
     return {"loss": frame_loss.batch_mean(), "frame_bce": frame_loss.mean(),
-            **calibration.results(selection_metric)}
+            **calibration.results(selection_metric, {values: accumulator.results() for values, accumulator in avgf.items()})}
 
 
-def pitch_loss_weights(bass_max_note=47, treble_min_note=84, edge_loss_weight=2.0,
+def pitch_loss_weights(bass_max_note=47, treble_min_note=84, edge_loss_weight=1.0,
                        device=None, middle_loss_weight=1.0,
                        middle_min_note=FOCUS_LOW_NOTE, middle_max_note=FOCUS_HIGH_NOTE):
     """Weight positive and negative errors; explicit middle emphasis overrides edges."""
@@ -252,7 +262,7 @@ def train(args) -> None:
     multires = architecture in MULTIRES_ARCHITECTURES
     learned = hasattr(model, "threshold_module")
     global_thresholds = learned and model.threshold_module.scope == "global"
-    suffix = "-v8" if fourier else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
+    suffix = f"-v{FOURIER_MODEL_VERSION}" if fourier else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
     output = Path(args.output or f"checkpoints/piano{suffix}.pt")
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -298,23 +308,25 @@ def train(args) -> None:
     if not isinstance(calibration_every, int) or calibration_every < 1:
         raise ValueError("Calibration interval must be a positive integer.")
     training_options = {}
-    legacy_v8_emphasis = fourier and "middle_sampling" not in prior
-    for name, default in (("bass_sampling", 0.0 if fourier else 0.3 if balanced else 0.5 if multires else 0.0), ("bass_max_note", 47),
-                          ("treble_sampling", 0.0 if fourier else 0.3 if balanced else 0.0), ("treble_min_note", 84),
-                          ("middle_sampling", 0.6 if fourier else 0.0),
+    reset_pitch_emphasis = prior.get("pitch_emphasis_version", 0) < PITCH_EMPHASIS_VERSION
+    pitch_emphasis_defaults = {"bass_sampling": 0.0, "treble_sampling": 0.0, "middle_sampling": 0.0,
+                               "edge_loss_weight": 1.0, "middle_loss_weight": 1.0}
+    for name, default in (("bass_sampling", 0.0), ("bass_max_note", 47),
+                          ("treble_sampling", 0.0), ("treble_min_note", 84),
+                          ("middle_sampling", 0.0),
                           ("middle_min_note", FOCUS_LOW_NOTE), ("middle_max_note", FOCUS_HIGH_NOTE),
-                          ("edge_loss_weight", 1.0 if fourier else 2.0 if balanced else 1.0),
-                          ("middle_loss_weight", 2.0 if fourier else 1.0),
+                          ("edge_loss_weight", 1.0), ("middle_loss_weight", 1.0),
                           ("offset_loss_weight", 1.0 if multires else 0.5),
                           ("release_loss_weight", 0.25 if multires else 0.0)):
         value = getattr(args, name, None)
-        previous = {} if legacy_v8_emphasis and name in ("bass_sampling", "treble_sampling", "edge_loss_weight") else prior
+        # Pre-uniform checkpoints must not silently restore their old pitch emphasis.
+        previous = {} if reset_pitch_emphasis and name in pitch_emphasis_defaults else prior
         training_options[name] = previous.get(name, default) if value is None else value
     if any(not math.isfinite(training_options[name]) or training_options[name] < 0
            for name in ("offset_loss_weight", "release_loss_weight")):
         raise ValueError("Offset and release loss weights must be finite and nonnegative.")
     pitch_weights = None
-    if balanced or training_options["edge_loss_weight"] != 1 or training_options["middle_loss_weight"] != 1:
+    if training_options["edge_loss_weight"] != 1 or training_options["middle_loss_weight"] != 1:
         pitch_weights = pitch_loss_weights(training_options["bass_max_note"],
             training_options["treble_min_note"], training_options["edge_loss_weight"], device,
             middle_loss_weight=training_options["middle_loss_weight"],
@@ -344,6 +356,9 @@ def train(args) -> None:
     metric = getattr(args, "selection_metric", "auto")
     if metric == "auto":
         metric = default_selection_metric(architecture)
+    selection_mode = "min" if metric == "avgf_loss" else "max"
+    if metric == "avgf_loss" and not fourier:
+        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
     if learned and any(getattr(args, name, None) is not None for name in (
             "thresholds", "frame_thresholds", "onset_thresholds", "offset_thresholds")):
         raise ValueError("The calibrated architecture learns its thresholds. Omit threshold grids while training.")
@@ -360,6 +375,11 @@ def train(args) -> None:
     if multires or validation_calibration:
         validation_settings.update(release_frames=config.get("release_frames", 2),
                                    calibration_values=calibration_values if validation_calibration else [])
+    if metric == "avgf_loss":
+        validation_settings["avgf"] = {"temperature": threshold_options["threshold_temperature"],
+                                       "regularization": threshold_options["threshold_regularization"],
+                                       "prior": model.threshold_module.prior.detach().cpu().tolist(),
+                                       "aggregation": "all_validation_frames", "pitch_weights": "equal"}
     signature = hashlib.sha256(json.dumps(validation_settings, sort_keys=True).encode()).hexdigest()
     comparable = saved.get("validation_signature") == signature and output.exists()
     if resume and saved.get("selection_metric") != metric:
@@ -390,14 +410,16 @@ def train(args) -> None:
                     group["lr"] = args.lr
         if learned and getattr(args, "threshold_lr", None) is not None:
             optimizer.param_groups[1]["lr"] = args.threshold_lr
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5,
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=selection_mode, factor=0.5,
         patience=getattr(args, "lr_patience", 3), min_lr=1e-6)
     if restoring_optimizer and comparable and "scheduler" in saved:
         scheduler.load_state_dict(saved["scheduler"])
     if "rng" in saved:
         restore_rng(saved["rng"], device)
     start_epoch = int(saved.get("epoch", 0))
-    best_score = float(saved.get("best_score", saved.get("best_f1", -1))) if comparable else -1.0
+    initial_best = float("inf") if selection_mode == "min" else -1.0
+    fallback_best = saved.get("validation", {}).get(metric, initial_best) if selection_mode == "min" else saved.get("best_f1", initial_best)
+    best_score = float(saved.get("best_score", fallback_best)) if comparable else initial_best
     best_f1 = float(saved.get("best_f1", -1)) if comparable else -1.0
     stale = int(saved.get("stale_epochs", 0)) if comparable else 0
     if getattr(args, "reset_early_stopping", False):
@@ -412,7 +434,7 @@ def train(args) -> None:
         payload = {"format_version": checkpoint_format_version(architecture), "model": model.state_dict(), "model_config": model_config(model),
                 "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
                 "epoch": epoch, "validation": metrics, "best_f1": best_f1, "best_score": best_score,
-                "selection_metric": metric, "stale_epochs": stale, "threshold": metrics["threshold"],
+                "selection_metric": metric, "selection_mode": selection_mode, "stale_epochs": stale, "threshold": metrics["threshold"],
                 "thresholds": chosen.to_dict(), "min_note_seconds": minimum, "validation_signature": signature,
                 "sample_rate": SAMPLE_RATE, "hop_length": HOP_LENGTH, "rng": rng_state(),
                 "training_config": {"augment": augment, "positive_weight": positive_weight,
@@ -421,9 +443,13 @@ def train(args) -> None:
                     "threshold_objective": "pitch_f0123" if fourier else "pitch_f03" if balanced else "f1",
                     "seconds": args.seconds, "windows_per_file": args.windows_per_file, "seed": seed,
                     "early_stopping": False, "patience": 0, "threshold_calibration": calibration_mode,
-                    "calibration_values": calibration_values, "calibration_every": calibration_every, **training_options}}
+                    "calibration_values": calibration_values, "calibration_every": calibration_every,
+                    "pitch_emphasis_version": PITCH_EMPHASIS_VERSION, **training_options}}
         if training_metrics is not None:
             payload["training_metrics"] = training_metrics
+        if fourier:
+            payload["model_version"] = FOURIER_MODEL_VERSION
+            payload["training_config"]["model_version"] = FOURIER_MODEL_VERSION
         return payload
 
     def validation_score(epoch=None):
@@ -440,7 +466,9 @@ def train(args) -> None:
                 candidates = list(dict.fromkeys([current, *threshold_grid(
                     current, calibration_values, calibration_values, calibration_values)]))
         metrics = score(model, val_loader, device, selection_metric=metric,
-                        min_note_seconds=minimum, threshold_configs=candidates)
+                        min_note_seconds=minimum, threshold_configs=candidates,
+                        **({"avgf_temperature": threshold_options["threshold_temperature"],
+                            "avgf_regularization": threshold_options["threshold_regularization"]} if fourier else {}))
         if validation_calibration and saved_thresholds(metrics) != current:
             model.threshold_module.initialize(saved_thresholds(metrics))
         metrics.update(calibration_search=search,
@@ -452,7 +480,8 @@ def train(args) -> None:
         print(f"Restored {architecture} model at epoch {start_epoch}; optimizer={'restored' if restoring_optimizer else 'fresh'}", flush=True)
     elif not init_from:
         print(f"Fresh random initialization; seed={seed}; starting at epoch 1", flush=True)
-    print(f"Training {architecture} ({sum(p.numel() for p in model.parameters()):,} parameters) on "
+    version_label = f"V{FOURIER_MODEL_VERSION} " if fourier else ""
+    print(f"Training {version_label}{architecture} ({sum(p.numel() for p in model.parameters()):,} parameters) on "
           f"{len(train_set.records)} recordings; validating on {len(val_set.records)}; device={device}; "
           f"selection={metric}; epochs={args.epochs}; early_stopping=disabled; augmentation={augment}", flush=True)
     print((f"Calibrating three global threshold parameters on decoded validation {metric} every {calibration_every} epochs; validating current thresholds every epoch" if validation_calibration else
@@ -469,12 +498,17 @@ def train(args) -> None:
         print(f"Middle-focused window fraction={training_options['middle_sampling']:.2f}; "
               f"MIDI {train_set.middle_min_note}-{train_set.middle_max_note}; "
               f"{len(train_set.middle_anchors)} training middle strikes indexed; validation sampling unchanged", flush=True)
-        if resume and legacy_v8_emphasis:
-            print("Older V8 checkpoint: applying the new middle-note emphasis; explicit pitch sampling/loss options override it.", flush=True)
+    if not any(training_options[name] for name in ("bass_sampling", "treble_sampling", "middle_sampling")):
+        print("Training windows use ordinary random sampling across recordings", flush=True)
+    if resume and reset_pitch_emphasis and any(prior.get(name, default) != default
+                                               for name, default in pitch_emphasis_defaults.items()):
+        print("Cleared saved pitch emphasis; explicit CLI pitch controls override the equal-note defaults", flush=True)
     if balanced:
         threshold_scores = "F0,F1,F2,F3" if fourier else "F0,F3"
-        print(f"Bass/treble error weight={training_options['edge_loss_weight']:g}; "
-              f"middle error weight={training_options['middle_loss_weight']:g}; "
+        weight_summary = ("Equal error weights for all 88 piano keys; " if pitch_weights is None else
+                          f"Bass/treble error weight={training_options['edge_loss_weight']:g}; "
+                          f"middle error weight={training_options['middle_loss_weight']:g}; ")
+        print(weight_summary +
               f"threshold objective=smooth per-pitch mean({threshold_scores}); validation uses decoded notes", flush=True)
     if not comparable and (resume or init_from and complete_transfer):
         initial_metrics = validation_score()
@@ -519,7 +553,7 @@ def train(args) -> None:
         metrics = validation_score(epoch)
         chosen = saved_thresholds(metrics)
         value = metrics[metric]
-        improved = value > best_score + 1e-6
+        improved = value < best_score - 1e-6 if selection_mode == "min" else value > best_score + 1e-6
         stale = 0 if improved else stale + 1
         if improved:
             best_score = value
@@ -528,12 +562,14 @@ def train(args) -> None:
         log = {"epoch": epoch, "train_loss": training_metrics["total_loss"],
                "train_frame_bce": training_metrics["frame_bce"],
                "train_loss_components": training_metrics["loss_components"], "validation": metrics,
-               "lr": optimizer.param_groups[0]["lr"], "selection_metric": metric, "seed": seed,
+               "lr": optimizer.param_groups[0]["lr"], "selection_metric": metric, "selection_mode": selection_mode, "seed": seed,
                "best_score": best_score, "stale_epochs": stale, "early_stopping": False, "patience": 0,
                "train_seconds": train_seconds, "validation_seconds": metrics["validation_seconds"],
                "epoch_seconds": time.perf_counter() - epoch_started,
                "calibration_search": metrics["calibration_search"],
                "calibration_candidates": metrics["calibration_candidates"]}
+        if fourier:
+            log["model_version"] = FOURIER_MODEL_VERSION
         if learned:
             log.update(threshold_loss=averages[1],
                        threshold_lr=optimizer.param_groups[1]["lr"])
@@ -549,9 +585,10 @@ def train(args) -> None:
                               f"note_macro_f0123={metrics['note_macro_f0123']:.4f} ")
         threshold_digits = 6 if balanced else 2
         component_summary = " ".join(f"{name}={value:.4f}" for name, value in log["train_loss_components"].items())
+        avgf_summary = f"val_avgf_loss={metrics['avgf_loss']:.6f} " if "avgf_loss" in metrics else ""
         print(f"epoch={epoch} train_total_loss={log['train_loss']:.4f} "
               f"train_frame_bce={log['train_frame_bce']:.4f} val_frame_bce={metrics['frame_bce']:.4f} "
-              f"val_f1={metrics['f1']:.4f} onset_f1={metrics['onset_f1']:.4f} note_f1={metrics['note_f1']:.4f} "
+              f"{avgf_summary}val_f1={metrics['f1']:.4f} onset_f1={metrics['onset_f1']:.4f} note_f1={metrics['note_f1']:.4f} "
               f"note_f_avg={metrics['note_f_avg']:.4f} stale_epochs={stale} "
               f"{pitch_summary}"
               f"precision={metrics['precision']:.4f} recall={metrics['recall']:.4f} "

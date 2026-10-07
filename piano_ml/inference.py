@@ -11,7 +11,7 @@ import torch
 
 from .data import read_wav_window
 from .decode import decode, decode_outputs
-from .model import HOP_LENGTH, SAMPLE_RATE, build_model, model_config
+from .model import HOP_LENGTH, SAMPLE_RATE, FOURIER_ARCHITECTURE, build_model, model_config
 from .thresholds import saved_thresholds, Thresholds
 
 
@@ -40,6 +40,9 @@ def load_model(checkpoint: str | Path, device: torch.device) -> torch.nn.Module:
     saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
     model = build_model(saved.get("model_config"))
     model.load_state_dict(saved["model"])
+    if model.architecture == FOURIER_ARCHITECTURE:
+        # Legacy V8 files have identical tensors but no minor-version metadata.
+        model.model_version = str(saved.get("model_version", "8"))
     model.decoding_thresholds = model.learned_thresholds() if hasattr(model, "learned_thresholds") else saved_thresholds(saved)
     model.detection_threshold = model.decoding_thresholds.summary()["frame"]
     model.min_note_seconds = float(saved.get("min_note_seconds", 0.04 if model.architecture != "frame" else 0.08))
@@ -76,6 +79,7 @@ def transcribe_audio(audio: str | Path, checkpoint: str | Path, threshold: float
                   release_frames=model_config(model).get("release_frames", 2)))
     return {"audio": str(Path(audio).resolve()), "model": str(Path(checkpoint).resolve()),
             "architecture": model_config(model)["architecture"],
+            **({"model_version": model.model_version} if hasattr(model, "model_version") else {}),
             "duration": round(duration, 6), "threshold": threshold,
             "thresholds": values.to_dict(),
             "inference_config": {"chunk_seconds": CHUNK_SECONDS, "context_seconds": context,

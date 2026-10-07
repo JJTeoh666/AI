@@ -2,7 +2,7 @@
 
 Identify piano notes and chords from WAV recordings, display the transcription on a piano grand staff, and play it with sampled piano sound.
 
-The current model is **V8** (`onsets-fourier-recurrent`): a PyTorch network combining Fourier analysis, convolution and recurrence, with **10,012,924 trainable parameters**. It predicts 88 piano keys, note starts and releases, velocity, and sustain pedal.
+The current model is **V8.1** (`onsets-fourier-recurrent`): V8's Fourier, convolution and recurrent network with **equal training weights for all 88 piano keys** and ordinary random windows. It retains **10,012,924 trainable parameters** and predicts note activity, starts, releases, velocity and sustain pedal. Existing V8 checkpoints can resume into V8.1.
 
 ## Contents
 
@@ -12,7 +12,7 @@ The current model is **V8** (`onsets-fourier-recurrent`): a PyTorch network comb
 - [Desktop app and playback](#desktop-app-and-playback)
 - [Command-line transcription](#command-line-transcription)
 - [Evaluation](#evaluation)
-- [V8 model and checkpoint selection](#v8-model-and-checkpoint-selection)
+- [V8.1 model and checkpoint selection](#v81-model-and-checkpoint-selection)
 - [Troubleshooting](#troubleshooting)
 - [Older models](#older-models)
 - [Project files and checks](#project-files-and-checks)
@@ -97,17 +97,17 @@ Downloads use HTTP range requests to fetch selected entries from official ZIP ar
 
 ```powershell
 python -m piano_ml train --data data/maestro `
-  --architecture onsets-fourier-recurrent --output checkpoints/piano-v8.pt `
+  --architecture onsets-fourier-recurrent --output checkpoints/piano-v8.1.pt `
   --epochs 100 --lr 0.0003 --threshold-lr 0.003 `
-  --selection-metric note_macro_f0123 --lr-patience 6 `
+  --selection-metric avgf_loss --lr-patience 6 `
   --windows-per-file 32 --batch-size 4 --augment --device auto
 ```
 
-This starts V8 with random weights and three random global thresholds in 0.35–0.65. A new random seed is printed and saved; add `--seed 42` for repeatable initialization. Choose a new `--output` filename for an independent experiment.
+This starts V8.1 with random weights and three random global thresholds in 0.35–0.65. A new random seed is printed and saved; add `--seed 42` for repeatable initialization. `--architecture auto` also creates V8.1; its default output is `checkpoints/piano-v8.1.pt`. Choose a new `--output` filename for an independent experiment.
 
-With the current inventory and these settings, an epoch contains **1,632 training windows / 408 batches** and **256 fixed validation windows**. Windows are four seconds long. V8 samples **60% around notes in MIDI 30–68**, using inverse square-root pitch counts to favor rare notes, and **40% ordinarily**, with augmentation. An empty focus pool falls back to ordinary windows. Validation uses ordinary deterministic windows.
+With the current inventory and these settings, an epoch contains **1,632 training windows / 408 batches** and **256 fixed validation windows**. Windows are four seconds long. Training uses **100% ordinary random windows** across the active recordings, with augmentation. Validation uses ordinary deterministic windows.
 
-V8 gives errors on MIDI 30–68 **weight 2**, and other keys **weight 1**, including missed notes and false positives. These normalized weights affect frame/onset/offset, release and velocity objectives, and the learned-threshold objective. All 88 keys remain predicted and evaluated; pedal supervision stays the same. The focus controls are `--middle-sampling`, `--middle-min-note`, `--middle-max-note` and `--middle-loss-weight`. Bass and treble sampling default to zero in V8; all three sampling fractions must sum to at most 1. Older architectures retain their original defaults.
+All model versions now give **each of the 88 piano keys the same pitch weight: 1**. Bass, middle and treble sampling all default to **0**. This removes pitch-range emphasis from frame/onset/offset, release, velocity and V7/V8 learned-threshold objectives. Positive-note and event weights still distinguish active targets from inactive ones using the same settings for every key; pedal supervision stays the same. Equal weighting does not change how often each note occurs in the recordings. Existing optional pitch-focus flags remain available for explicitly requested experiments.
 
 ### Resume training
 
@@ -115,11 +115,11 @@ Use the checkpoint from the **latest completed epoch**:
 
 ```powershell
 python -m piano_ml train --data data/maestro `
-  --resume checkpoints/piano-v8.last.pt --output checkpoints/piano-v8.pt `
+  --resume checkpoints/piano-v8.1.last.pt --output checkpoints/piano-v8.1.pt `
   --epochs 50 --windows-per-file 32 --batch-size 4 --device auto
 ```
 
-On resume, `--epochs 50` means **50 additional epochs**. Saved weights, thresholds, optimizer, scheduler, epoch, random state and training emphasis are restored. Older V8 checkpoints without `middle_sampling` automatically adopt the new MIDI 30–68 emphasis; explicit CLI controls override it. Checkpoints saved with the new focus settings retain those settings on subsequent resumes. Keep the same `--seconds` and `--windows-per-file` to preserve the validation comparison. Auto resume retains the checkpoint's architecture, including older models.
+On resume, `--epochs 50` means **50 additional epochs**. Saved model weights, thresholds, optimizer, scheduler, epoch and random state are restored. Checkpoints from the previous trainers automatically switch to **ordinary random sampling and equal pitch weights**, clearing their saved middle/bass/treble emphasis. Explicit pitch-focus CLI options override these defaults. New checkpoints record `training_config.pitch_emphasis_version=2` and restore their recorded settings on subsequent resumes. V8 resumes save new checkpoints as **V8.1**; the network architecture and validation comparison stay compatible. Keep the same `--seconds` and `--windows-per-file` to preserve that comparison. Older architectures retain their own model structures.
 
 Ctrl+C discards an incomplete epoch; the latest completed checkpoint remains available.
 
@@ -127,30 +127,36 @@ Ctrl+C discards an incomplete epoch; the latest completed checkpoint remains ava
 
 Supply `--lr` or `--threshold-lr` to override a restored learning rate. `--reset-optimizer` deliberately starts fresh optimizer and scheduler states; use it when that is the intended experiment.
 
-### Continue with the refreshed data and focus
+### Continue training with equal note weights
 
-The data and code are ready; launch this separate continuation run when ready:
+To upgrade an existing V8 run to V8.1 with equal note weights:
 
 ```powershell
 python -m piano_ml train --data data/maestro `
-  --resume checkpoints/piano-v8.last.pt --output checkpoints/piano-v8-middle.pt `
-  --middle-sampling 0.6 --middle-min-note 30 --middle-max-note 68 `
-  --middle-loss-weight 2 --bass-sampling 0 --treble-sampling 0 --edge-loss-weight 1 `
+  --resume checkpoints/piano-v8.last.pt --output checkpoints/piano-v8.1.pt `
+  --middle-sampling 0 --bass-sampling 0 --treble-sampling 0 `
+  --middle-loss-weight 1 --edge-loss-weight 1 `
   --reset-optimizer --lr 0.0001 --threshold-lr 0.001 `
   --epochs 50 --windows-per-file 32 --batch-size 4 --augment --device auto
 ```
 
-This continues the learned recognizer and thresholds, with fresh optimizer/scheduler states and explicit learning rates for the changed training distribution. It writes latest checkpoints under `piano-v8-middle`, preserving the original V8 files. A new `piano-v8-middle.pt` is saved when validation improves beyond the inherited best-score target; until then, the original best model remains available. Best-model selection remains validation **pitch F0123** across supported keys. A resumed run keeps the previous best-score target when validation settings match.
+This continues the learned recognizer and thresholds, with fresh optimizer/scheduler states and explicit learning rates. It writes best/latest checkpoints under `piano-v8.1`, preserving the original V8 files. V8.1 evaluates the starting checkpoint using **validation AvgF loss** to establish a new best-loss comparison, then saves improvements. V8's previous decoded F0123 score is not compared numerically with a loss. Use your most recent `.last.pt` as `--resume` if you have continued training under another filename. Omit `--reset-optimizer` and the learning-rate flags to retain optimizer momentum; a change of selection criterion resets the scheduler's comparison state.
+
+New Fourier checkpoints and history entries carry `model_version="8.1"`; transcription/evaluation JSON reports the loaded checkpoint's version. V8 files without that metadata are displayed as V8 and remain usable. The checkpoint container's `format_version=9` and the architecture identifier stay compatible with V8.
 
 ### Saved files and training length
 
 | File | Use |
 | --- | --- |
-| `checkpoints/piano-v8.pt` | Best validation score; select this model in the app. |
-| `checkpoints/piano-v8.last.pt` | Latest completed epoch; resume training from this file. |
-| `checkpoints/piano-v8.history.jsonl` | Per-epoch scores, thresholds, learning rates and timing. |
+| `checkpoints/piano-v8.1.pt` | Best validation score; select this model in the app. |
+| `checkpoints/piano-v8.1.last.pt` | Latest completed epoch; resume training from this file. |
+| `checkpoints/piano-v8.1.history.jsonl` | Per-epoch scores, thresholds, learning rates and timing. |
 
-For V8, **`note_macro_f0123`** controls best-model selection and learning rate scheduling. The best checkpoint changes when the score improves by more than `1e-6`. Training runs all requested epochs even when validation stops improving. The `stale_epochs` count remains in logs as a diagnostic. Learning rate reduction still uses `--lr-patience`.
+For V8.1, **`avgf_loss`** controls best-model selection and learning rate scheduling. **Lower is better**: replace best when `val_avgf_loss < best_loss - 1e-6`. The scheduler runs in minimum mode. `best_score` stores the minimum loss, and `selection_mode="min"` records its direction. Training runs all requested epochs even when validation stops improving. The `stale_epochs` count remains a diagnostic; learning rate reduction uses `--lr-patience`.
+
+Validation AvgF loss uses the same smooth mean(F0,F1,F2,F3) threshold objective as training, with equal key weights, inactive-key false-activity penalties and threshold-prior regularization. Soft decisions are `sigmoid((probability - threshold) / temperature)`. Counts from frame, onset and offset targets are summed across **all validation frames before computing the loss**, so a smaller final batch or different batch size does not alter weighting. This reuses the existing validation predictions and adds no model forward passes.
+
+The console prints `val_avgf_loss`; checkpoints/history save it as `validation.avgf_loss`, alongside `avgf_data_loss` and `avgf_prior_loss`. Training `threshold_loss` remains the raw per-batch threshold objective. Decoded pitch F0123, note F1 and onset F1 remain recognition diagnostics. Smooth-loss improvements do not guarantee higher decoded note scores. Use `--selection-metric note_macro_f0123` for an explicit comparison using the previous selection method.
 
 Changing the validation files, window settings or selection metric starts a new comparison. Adding training recordings alone preserves comparison with the previous best.
 
@@ -176,7 +182,7 @@ epoch=101 train_total_loss=0.4875 train_frame_bce=0.0912 val_frame_bce=0.0798 ..
 
 Completed-epoch best/latest checkpoints also save `training_metrics` with `total_loss`, `frame_bce` and `loss_components`. Frame-only models report zero for unsupported components. New fields appear after restarting/resuming with this trainer; existing history lines remain unchanged, and older checkpoints can still resume.
 
-Training still uses augmentation, dropout and focused sampling; validation uses evaluation mode and deterministic ordinary windows. These conditions can create a gap even with the same frame-loss formula. Reporting reuses existing predictions and adds no model forward passes. Use validation **pitch F0123** to judge recognition quality and select the best V8 checkpoint.
+Training still uses augmentation, dropout and ordinary random sampling; validation uses evaluation mode and deterministic ordinary windows. These conditions can create a gap even with the same frame-loss formula. Reporting reuses existing predictions and adds no model forward passes. Validation **AvgF loss** selects the best V8.1 checkpoint; use decoded pitch F0123 and note scores to assess recognition quality.
 
 ## Desktop app and playback
 
@@ -184,7 +190,7 @@ Training still uses augmentation, dropout and focused sampling; validation uses 
 python app.py
 ```
 
-1. Choose a checkpoint in **Model**. Use **Refresh** to discover saved models or **Browse model…** to open another checkpoint. The app prefers `piano-v8.pt` when it exists.
+1. Choose a checkpoint in **Model**. Use **Refresh** to discover saved models or **Browse model…** to open another checkpoint. The app prefers `piano-v8.1.pt` when it exists, then `piano-v8.pt`. Its threshold summary displays the loaded V8/V8.1 version.
 2. Select **Choose WAV…** and open an uncompressed 16-bit PCM piano recording.
 3. Choose **Auto**, **CPU** or **CUDA**, the **Analysis overlap (s)** and **Overlap method**. The app starts with **Weighted average** and 2 seconds of overlap. Leave **Use model thresholds** checked, then select **Analyze**.
 4. Open **Staff** for a grand staff with five treble lines and five bass lines. **Staff zoom** adjusts the notation size from 75% to 200% (starting at 125%). Scroll the main content with the mouse wheel or right-hand scrollbar to view the larger score. **Previous** and **Next** change pages; **Notation tempo (BPM)** and **Update staff** adjust the approximate notation.
@@ -269,7 +275,7 @@ The sound bank by Alexander Holm, converted for FreePats by Roberto, uses **CC B
 
 ```powershell
 python -m piano_ml predict path\to\solo-piano.wav `
-  --checkpoint checkpoints/piano-v8.pt --output prediction.json --device auto
+  --checkpoint checkpoints/piano-v8.1.pt --output prediction.json --device auto
 ```
 
 Input must be uncompressed **16-bit PCM WAV**, mono or stereo. The reader resamples it to 16 kHz mono. Output includes note names, MIDI pitches, start/end times, confidence, velocity, pedal events and recognized chord spans. Open the JSON in the app to view and play it.
@@ -280,15 +286,15 @@ Evaluate complete validation recordings, then use the test split for the final a
 
 ```powershell
 python -m piano_ml evaluate --data data/maestro `
-  --checkpoint checkpoints/piano-v8.pt --split validation --full-recordings `
-  --output validation-v8.json --device auto
+  --checkpoint checkpoints/piano-v8.1.pt --split validation --full-recordings `
+  --output validation-v8.1.json --device auto
 
 python -m piano_ml evaluate --data data/maestro `
-  --checkpoint checkpoints/piano-v8.pt --split test --full-recordings `
-  --output test-v8.json --device auto
+  --checkpoint checkpoints/piano-v8.1.pt --split test --full-recordings `
+  --output test-v8.1.json --device auto
 ```
 
-Each `--output` also creates a `.pitches.csv` report, such as `validation-v8.pitches.csv`, with counts and scores for all 88 keys. Inspect `reference_count`, precision and recall to judge rare bass/treble pitches.
+Each `--output` also creates a `.pitches.csv` report, such as `validation-v8.1.pitches.csv`, with counts and scores for all 88 keys. Inspect `reference_count`, precision and recall to judge rare bass/treble pitches.
 
 Reports include frame precision/recall/F1, onset F1, note F0–F4, macro per-key scores and the selection metric. A note match requires exact MIDI pitch, onset within 50 ms, and offset within `max(50 ms, 20% of reference duration)`.
 
@@ -302,9 +308,9 @@ MIDI labels represent keys held down; pedal is predicted separately. Chord names
 
 The model analyzes files offline using bidirectional context. The local dataset remains a small subset of MAESTRO, and recordings with other instruments, noise or unfamiliar pianos may perform worse. Trial checkpoints verify execution; their short runs do not establish recognition quality.
 
-## V8 model and checkpoint selection
+## V8.1 model and checkpoint selection
 
-V8 combines two audio resolutions (2048- and 8192-sample FFTs), independent CNN encoders, Fourier Analysis Network layers, two learned temporal Fourier blocks and a two-layer bidirectional GRU. It produces frame, onset, offset, velocity and pedal predictions every **20 ms**.
+V8.1 uses V8's two audio resolutions (2048- and 8192-sample FFTs), independent CNN encoders, Fourier Analysis Network layers, two learned temporal Fourier blocks and a two-layer bidirectional GRU. It produces frame, onset, offset, velocity and pedal predictions every **20 ms**. Its training revision removes pitch-range emphasis while keeping the same structure and validation metric.
 
 Three global thresholds—frame, onset and offset—are learned by gradient descent on training targets and shared across all 88 keys. Validation evaluates the current values once per epoch.
 
@@ -318,13 +324,13 @@ note_macro_f0123 = mean(pitch F0123 across keys with reference notes)
 
 F0 is precision, F1 balances precision and recall, and F2/F3 give recall more weight. These names describe F-beta metrics. Every supported key contributes equally; undefined scores are zero. False positives on keys without references remain in the micro metrics and per-key reports.
 
-See [V8 structure, parameter budget and verification](docs/model-v8.md) for the full diagram, loss/threshold details and trial records.
+See [V8/V8.1 structure, parameter budget and verification](docs/model-v8.md) for the full diagram, loss/threshold details and trial records.
 
 ## Troubleshooting
 
 | Symptom | Action |
 | --- | --- |
-| Missing `piano-v8.last.pt` | Check `checkpoints/` for the actual filename. The latest checkpoint exists only after a completed epoch; use an existing compatible checkpoint or start a new run. |
+| Missing `piano-v8.1.last.pt` | Check `checkpoints/` for the actual filename. The latest checkpoint exists only after a completed epoch; use an existing V8 checkpoint to upgrade or start a new run. |
 | A previous run stopped early | Restart/resume with the updated trainer. Early stopping is removed; `--epochs` sets the training length. |
 | New recordings are absent | Restart/resume training and omit `--max-files`. The startup message reports the recording count. |
 | CUDA runs out of memory | Reduce `--batch-size` to 2 or 1. |
@@ -336,11 +342,12 @@ See [V8 structure, parameter budget and verification](docs/model-v8.md) for the 
 
 ## Older models
 
-Fresh `--architecture auto` creates V8. Resume restores the saved architecture. V5–V7 recognizers have different structures from V8; start V8 fresh or use `--init-from` with another compatible V8 checkpoint.
+Fresh `--architecture auto` creates V8.1. Resume restores the saved architecture; V8 training continues as V8.1. V5–V7 recognizers have different structures from V8/V8.1; start V8.1 fresh or use `--init-from` with a compatible V8 or V8.1 checkpoint.
 
 | Version | Architecture | Default selection metric |
 | --- | --- | --- |
-| V8 | `onsets-fourier-recurrent` | `note_macro_f0123` |
+| V8.1 (current) | `onsets-fourier-recurrent` | `avgf_loss` (minimum) |
+| V8 (compatible checkpoints) | `onsets-fourier-recurrent` | `note_macro_f0123` |
 | [V7](docs/model-versions.md#version-7) | `onsets-multires-balanced` | `note_macro_f03` |
 | [V6](docs/model-versions.md#version-6) | `onsets-multires-global` | `note_f_avg` |
 | [V5](docs/model-versions.md#version-5) | `onsets-recurrent-global` | `note_f_avg` |
@@ -361,7 +368,7 @@ Fresh `--architecture auto` creates V8. Resume restores the saved architecture. 
 | `checkpoints/` | Best/latest models and training history. |
 | `assets/` | Sampled piano sound and playback runtime. |
 | `diagnostics/` | Data verification and model trial reports. |
-| `docs/` | Detailed V8 and older-version references. |
+| `docs/` | Detailed V8/V8.1 and older-version references. |
 | `tests/` | Automated checks. |
 
 Run the checks:

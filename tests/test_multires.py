@@ -145,7 +145,7 @@ class MultiResolutionTest(unittest.TestCase):
         saved = torch.load(latest, weights_only=True)
         self.assertEqual(saved["format_version"], 7)
         self.assertEqual(saved["model_config"]["architecture"], "onsets-multires-global")
-        self.assertEqual(saved["training_config"]["bass_sampling"], 0.5)
+        self.assertEqual(saved["training_config"]["bass_sampling"], 0)
         self.assertEqual(saved["training_config"]["threshold_calibration"], "validation")
         self.assertEqual(saved["training_config"]["offset_loss_weight"], 1)
         self.assertEqual(saved["optimizer"]["param_groups"][1]["params"], [])

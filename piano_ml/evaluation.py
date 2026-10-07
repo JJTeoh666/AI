@@ -17,6 +17,7 @@ from .midi import read_notes
 from .model import (HOP_LENGTH, SAMPLE_RATE, LOW_NOTE, N_NOTES, model_config,
                     default_selection_metric, checkpoint_format_version)
 from .training import save_checkpoint, score
+from .avgf import avgf_accumulators, event_targets
 
 
 def evaluate(args):
@@ -27,7 +28,13 @@ def evaluate(args):
         raise ValueError("Threshold calibration requires --split validation. Keep test data for final evaluation.")
     metric = args.selection_metric
     if metric == "auto":
-        metric = default_selection_metric(model.architecture)
+        metric = default_selection_metric(model.architecture, getattr(model, "model_version", None))
+    saved = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
+    config = saved.get("training_config", {})
+    avgf_options = {"temperature": config.get("threshold_temperature", 0.1),
+                    "regularization": config.get("threshold_regularization", 0.05)}
+    if metric == "avgf_loss" and model.architecture != "onsets-fourier-recurrent":
+        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
     minimum = args.min_note_seconds if args.min_note_seconds is not None else model.min_note_seconds
     if args.full_recordings:
         root = Path(args.data)
@@ -35,6 +42,7 @@ def evaluate(args):
         if args.max_files is not None:
             records = records[:args.max_files]
         calibration = Calibration(grid, minimum, release_frames=model_config(model).get("release_frames", 2))
+        avgf = avgf_accumulators(model, grid, **avgf_options)
         for index, record in enumerate(records, 1):
             print(f"Evaluating recording {index}/{len(records)}: {record['audio_filename']}", flush=True)
             duration, probabilities = predict_probabilities(root / record["audio_filename"], model, device)
@@ -48,23 +56,33 @@ def evaluate(args):
                 last = min(len(truth), int(np.ceil(note["end"] * SAMPLE_RATE / HOP_LENGTH)))
                 truth[first:last, note["pitch"] - LOW_NOTE] = True
             calibration.add(probabilities, truth, reference, duration)
-        result = {**calibration.results(metric),
+            if avgf:
+                targets = event_targets(truth, reference, duration)
+                for accumulator in avgf.values():
+                    accumulator.add(probabilities, targets)
+        result = {**calibration.results(metric, {values: accumulator.results() for values, accumulator in avgf.items()}),
                   "recordings": len(records), "mode": "full_recordings"}
     else:
         data = MaestroWindows(args.data, args.split, seconds=args.seconds, max_files=args.max_files,
                               windows_per_file=args.windows_per_file, multi_target=True)
         loader = DataLoader(data, batch_size=args.batch_size, num_workers=args.workers, collate_fn=collate_windows)
         result = {**score(model, loader, device, selection_metric=metric,
-                         min_note_seconds=minimum, threshold_configs=grid),
+                         min_note_seconds=minimum, threshold_configs=grid,
+                         avgf_temperature=avgf_options["temperature"], avgf_regularization=avgf_options["regularization"]),
                   "recordings": len(data.records), "windows": len(data), "mode": "interior_windows"}
     result.update(split=args.split, architecture=model.architecture, selection_metric=metric,
+                  selection_mode="min" if metric == "avgf_loss" else "max",
                   min_note_seconds=minimum, onset_tolerance_seconds=0.05,
                   offset_tolerance="max(0.05 seconds, 20% of reference duration)")
+    if hasattr(model, "model_version"):
+        result["model_version"] = model.model_version
     chosen = Thresholds(**result["thresholds"])
     if chosen.pitch_dependent:
         result["register_thresholds"] = chosen.registers()
     if args.calibrate_output:
         payload = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
+        if hasattr(model, "model_version"):
+            payload["model_version"] = model.model_version
         payload.update(format_version=4, threshold=result["threshold"], thresholds=result["thresholds"], min_note_seconds=minimum,
                        calibration={"split": args.split, "metric": metric, "mode": result["mode"],
                                     "threshold_curve": result["threshold_curve"]})

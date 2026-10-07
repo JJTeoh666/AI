@@ -32,7 +32,7 @@ class LossReportingTest(unittest.TestCase):
         for focused in (False, True):
             with self.subTest(focused=focused):
                 output, targets = self.predictions_and_targets()
-                weights = pitch_loss_weights() if focused else torch.ones(88)
+                weights = pitch_loss_weights(edge_loss_weight=2) if focused else torch.ones(88)
                 # Reference the original weighted objective independently of the new helper.
                 def bce(head, positive_weight):
                     errors = F.binary_cross_entropy_with_logits(

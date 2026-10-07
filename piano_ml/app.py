@@ -300,7 +300,7 @@ class PianoApp:
             self.model_paths[path.name] = path
         self.models_box["values"] = list(self.model_paths)
         if not self.model.get() and self.model_paths:
-            preferred = ("piano-v8.pt", "piano-v7.pt", "piano-v6.pt", "piano-v5.pt", "piano-v2-separate.pt", "piano-v2-tuned.pt", "piano-v2.pt", "piano-tuned.pt", "piano.pt", "piano-demo.pt")
+            preferred = ("piano-v8.1.pt", "piano-v8.pt", "piano-v7.pt", "piano-v6.pt", "piano-v5.pt", "piano-v2-separate.pt", "piano-v2-tuned.pt", "piano-v2.pt", "piano-tuned.pt", "piano.pt", "piano-demo.pt")
             first = next((name for name in preferred if name in self.model_paths), next(iter(self.model_paths)))
             self.model.set(first)
         self.preview_thresholds()
@@ -311,6 +311,8 @@ class PianoApp:
         try:
             model = load_model(self.model_paths[self.model.get()], torch.device("cpu"))
             self.display_thresholds(model.decoding_thresholds)
+            if hasattr(model, "model_version"):
+                self.threshold_details.set(f"V{model.model_version} — " + self.threshold_details.get())
         except Exception as error:
             self.threshold_details.set(f"Cannot read model thresholds: {error}")
 

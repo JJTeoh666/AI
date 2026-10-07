@@ -116,6 +116,22 @@ class MiddleFocusTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             pitch_loss_weights(middle_min_note=20, middle_loss_weight=2)
 
+    def test_defaults_have_no_pitch_sampling_and_equal_gradients_for_every_key(self):
+        data = MaestroWindows(self.root, "train", seconds=1, random_windows=True, multi_target=True)
+        self.assertEqual((data.bass_sampling, data.middle_sampling, data.treble_sampling), (0, 0, 0))
+        with patch("piano_ml.data.random.choices", side_effect=AssertionError("Pitch anchoring should be disabled")):
+            self.assertEqual(data[0][1]["reference_notes"][0]["pitch"], 29)
+        self.assertTrue(torch.equal(pitch_loss_weights(), torch.ones(88)))
+        for truth in (0.0, 1.0):
+            output = {head: torch.zeros(1, 5, 88, requires_grad=True)
+                      for head in ("frame", "onset", "offset", "velocity")}
+            output["pedal"] = torch.zeros(1, 5, 1, requires_grad=True)
+            targets = {head: torch.full_like(logits, truth) for head, logits in output.items()}
+            training_loss(output, targets).backward()
+            for head in ("frame", "onset", "offset", "velocity"):
+                gradient = output[head].grad
+                torch.testing.assert_close(gradient, gradient[..., :1].expand_as(gradient), rtol=0, atol=0)
+
     def test_replacement_preserves_backups_and_heldout_splits(self):
         heldout = {name: (self.root / name).read_bytes() for name in
                    ("validation.wav", "validation.midi", "test.wav", "test.midi", "maestro-v3.0.0.csv")}

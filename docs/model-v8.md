@@ -1,10 +1,16 @@
-# Version 8 model reference
+# Versions 8 and 8.1 model reference
 
 [Back to the README](../README.md) · [Training commands](../README.md#training)
 
 Paths and commands refer to the project root. Trial results below record the checks performed when V8 was introduced.
 
 V8 has a new recognizer structure. Its default parameter count is approximately **10.01 million**, compared with V7's 1.44 million.
+
+## Version 8.1
+
+V8.1 is the equal-note training revision of V8. It uses the same **10,012,924 parameters**, architecture identifier (`onsets-fourier-recurrent`) and state tensors. Best-model selection now **minimizes validation AvgF loss**. Training uses ordinary random windows and pitch weight 1 for every key by default. The network and three learned global thresholds can be continued from any compatible V8 checkpoint.
+
+Fresh/continued Fourier training saves `model_version="8.1"` in checkpoint metadata and history. Default output files are `piano-v8.1.pt`, `piano-v8.1.last.pt` and `piano-v8.1.history.jsonl`. Prediction/evaluation reports and the app show the loaded model version; existing V8 files without version metadata remain labelled V8. The checkpoint container stays at `format_version=9` because the network tensors and saved structure remain compatible. Old files are retained when using the new default output name. See the [V8 to V8.1 continuation command](../README.md#continue-training-with-equal-note-weights).
 
 ```mermaid
 flowchart TD
@@ -53,11 +59,15 @@ note_macro_f0123 = mean(pitch F0123 across keys with reference notes)
 
 Undefined scores are zero. Each supported key has equal weight. F0 measures precision; F1 balances precision/recall; F2 and F3 favor recall. Keys without references are excluded from this macro average; their false positives remain in micro metrics and per-key reports. Exact MIDI pitch must match, onset must be within 50 ms, and offset must be within `max(50 ms, 20% of reference duration)`.
 
-`note_macro_f0123` controls best-checkpoint saving and learning rate reduction. Best is replaced only when this score improves by more than `1e-6`. Early stopping has been removed for all versions: training runs every requested epoch, including when resuming old checkpoints. V7 continues to default to `note_macro_f03`; earlier models keep their existing metrics. V8 reports all four macro scores and the combined average in the console, history and evaluation JSON. CSV adds per-key `f2`, `f0123` and `in_macro_f0123`.
+V8's decoded `note_macro_f0123` remains a diagnostic and an explicit selection option. **V8.1 defaults to `avgf_loss`**, the validation counterpart of the smooth threshold objective: mean per-key F0–F3 error on supported keys, false-activity penalties on unsupported keys, and threshold-prior regularization. Probabilities become soft decisions through `sigmoid((p - threshold) / temperature)`. Equal key weights are used. Soft true positives, predicted activity and target activity are accumulated over all validation frames before computing the loss. This matches the training objective evaluated on concatenated validation predictions, rather than averaging nonlinear losses independently per batch.
 
-Three global threshold parameters are updated on training batches with a differentiable per-key mean(F0,F1,F2,F3) surrogate, plus empty-key false-activity penalties and prior regularization. Classifier probabilities are detached for the threshold objective. The recognizer uses the supervised losses. V8 now defaults to **60% windows anchored on MIDI 30–68 inclusive / 40% ordinary random windows**, with inverse square-root pitch counts favoring rare focus notes. Normalized error weights are **2 inside MIDI 30–68 and 1 outside** for recognition and threshold learning. All 88 outputs and the validation selection metric remain the same. V7 retains its bass/treble defaults. `calibration=parameters threshold_sets=1` confirms that validation evaluates one current tuple; no grid search runs in V8 training.
+Best is replaced when validation AvgF loss falls by more than `1e-6`; the learning-rate scheduler also minimizes this loss. Checkpoints/history record `selection_metric="avgf_loss"`, `selection_mode="min"` and the minimum in `best_score`. The console prints `val_avgf_loss`; validation results also separate `avgf_data_loss` and `avgf_prior_loss`. Switching from V8's decoded score resets the best-loss and scheduler comparison using an evaluation of the starting weights. No additional model forward passes are required. Validation never updates model weights or thresholds.
 
-The focus controls are `--middle-sampling`, `--middle-min-note`, `--middle-max-note` and `--middle-loss-weight`. Their defaults are 0.6, 30, 68 and 2; V8 bass/treble sampling defaults to zero and edge weight to 1. Older V8 checkpoints without the new sampling field adopt these defaults on resume, unless explicitly overridden. Newly saved checkpoints restore their recorded focus settings. See the [continuation command](../README.md#continue-with-the-refreshed-data-and-focus) for the refreshed training data.
+Early stopping remains disabled for all versions. V8.1 continues to report decoded pitch F0123, onset F1 and offset-aware note scores; smooth loss improvement may not improve these discrete metrics. V7 and earlier models keep their own default selection metrics. Legacy V8 evaluation defaults to decoded F0123, and V8.1 evaluation defaults to AvgF loss. Explicit selection options allow comparisons using the same criterion.
+
+Three global threshold parameters are updated on training batches with a differentiable per-key mean(F0,F1,F2,F3) surrogate, plus empty-key false-activity penalties and prior regularization. Classifier probabilities are detached for the threshold objective. The recognizer uses the supervised losses. Training defaults to **100% ordinary random windows**, with **equal pitch weight 1 for all 88 keys** in recognition and threshold learning. Bass, middle and treble anchoring are disabled by default across all model versions. All 88 outputs remain the same. `calibration=parameters threshold_sets=1` confirms that validation evaluates one current tuple; no grid search runs in V8/V8.1 training.
+
+Previous checkpoints switch to the equal-note defaults on resume, clearing saved pitch emphasis. The trainer records `pitch_emphasis_version=2` so subsequent resumes preserve their new settings. Historical pitch-focus CLI controls remain available as explicit options. See the [continuation command](../README.md#continue-training-with-equal-note-weights).
 
 ## Size and memory controls
 

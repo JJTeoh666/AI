@@ -2,11 +2,13 @@ import json
 import tempfile
 import tkinter as tk
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
 from piano_ml.app import PianoApp
 from piano_ml.viewer import read_prediction
+from piano_ml.thresholds import Thresholds
 
 
 class AppOverlapTest(unittest.TestCase):
@@ -45,6 +47,26 @@ class AppOverlapTest(unittest.TestCase):
             self.app.set_busy(busy, "analysis")
             self.assertEqual(str(self.app.overlap_method_box["state"]), state)
             self.assertEqual(str(self.app.overlap_box["state"]), state)
+
+    def test_v81_model_is_preferred_and_version_is_displayed(self):
+        checkpoints = self.directory / "checkpoints"
+        checkpoints.mkdir()
+        for name in ("piano-v8.pt", "piano-v8.1.pt"):
+            (checkpoints / name).touch()
+        self.app.model.set("")
+        self.app.model_paths.clear()
+        with patch("piano_ml.app.PROJECT", self.directory), patch("piano_ml.app.load_model") as load:
+            load.return_value = SimpleNamespace(model_version="8.1", decoding_thresholds=Thresholds())
+            self.app.refresh_models()
+            self.assertEqual(self.app.model.get(), "piano-v8.1.pt")
+            self.assertTrue(self.app.threshold_details.get().startswith("V8.1"))
+            (checkpoints / "piano-v8.1.pt").unlink()
+            self.app.model.set("")
+            self.app.model_paths.clear()
+            load.return_value.model_version = "8"
+            self.app.refresh_models()
+            self.assertEqual(self.app.model.get(), "piano-v8.pt")
+            self.assertTrue(self.app.threshold_details.get().startswith("V8 —"))
 
     def test_selection_reaches_the_inference_worker(self):
         for label, blend in (("Weighted average", "weighted"), ("50/50 average", "equal"), ("Keep center", "crop")):

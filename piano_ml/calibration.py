@@ -40,7 +40,7 @@ class Calibration:
                 counts["note"] += values_by_pitch
                 self.pitch_counts[values][pitch - LOW_NOTE] += values_by_pitch
 
-    def results(self, metric="note_f_avg"):
+    def results(self, metric="note_f_avg", extra_metrics=None):
         curve = []
         pitch_reports = {}
         for values, counts in self.counts.items():
@@ -51,12 +51,18 @@ class Calibration:
                 row["name"] = pitch_name(row["pitch"])
             pitch_reports[values] = report["per_pitch_notes"]
             curve.append({"threshold": values.summary()["frame"], "thresholds": values.to_dict(),
+                          **(extra_metrics or {}).get(values, {}),
                           **precision_recall_f1(*counts["frame"]), "onset_f1": onset["f1"],
                           **note_f_scores(*counts["note"]), "note_precision": note["precision"],
                           "note_recall": note["recall"],
                           **{key: value for key, value in report.items() if key != "per_pitch_notes"}})
-        best = max(curve, key=lambda entry: (entry[metric],
-            entry["onset_f1"] if metric in ("note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123") else 0, entry["f1"],
-            -sum(abs(value - 0.5) for value in Thresholds(**entry["thresholds"]).summary().values())))
+        if metric == "avgf_loss":
+            if any("avgf_loss" not in entry for entry in curve):
+                raise ValueError("AvgF selection needs validation AvgF losses for each threshold set.")
+            best = min(curve, key=lambda entry: entry["avgf_loss"])
+        else:
+            best = max(curve, key=lambda entry: (entry[metric],
+                entry["onset_f1"] if metric in ("note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123") else 0, entry["f1"],
+                -sum(abs(value - 0.5) for value in Thresholds(**entry["thresholds"]).summary().values())))
         return {**best, "threshold_curve": curve,
                 "per_pitch_notes": pitch_reports[Thresholds(**best["thresholds"])]}

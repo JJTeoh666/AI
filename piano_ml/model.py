@@ -15,6 +15,7 @@ HIGH_NOTE = 108
 N_NOTES = HIGH_NOTE - LOW_NOTE + 1
 V7_ARCHITECTURE = "onsets-multires-balanced"
 FOURIER_ARCHITECTURE = "onsets-fourier-recurrent"
+FOURIER_MODEL_VERSION = "8.1"
 DEFAULT_ARCHITECTURE = FOURIER_ARCHITECTURE
 BALANCED_ARCHITECTURES = (V7_ARCHITECTURE, FOURIER_ARCHITECTURE)
 RECURRENT_CONV_ARCHITECTURES = ("onsets-recurrent", "onsets-recurrent-global",
@@ -22,9 +23,9 @@ RECURRENT_CONV_ARCHITECTURES = ("onsets-recurrent", "onsets-recurrent-global",
 MULTIRES_ARCHITECTURES = ("onsets-multires-global", *BALANCED_ARCHITECTURES)
 
 
-def default_selection_metric(architecture):
+def default_selection_metric(architecture, model_version=None):
     if architecture == FOURIER_ARCHITECTURE:
-        return "note_macro_f0123"
+        return "note_macro_f0123" if model_version == "8" else "avgf_loss"
     if architecture == V7_ARCHITECTURE:
         return "note_macro_f03"
     return "f1" if architecture == "frame" else "note_f_avg"
@@ -358,9 +359,10 @@ class FourierSpectralEncoder(nn.Module):
 
 
 class FourierRecurrentPianoNet(nn.Module):
-    """V8: dual FFT/CNN encoders, Fourier Analysis Network layers and BiGRU."""
+    """V8/V8.1: dual FFT/CNN encoders, Fourier Analysis Network layers and BiGRU."""
 
     architecture = FOURIER_ARCHITECTURE
+    model_version = FOURIER_MODEL_VERSION
 
     def __init__(self, feature_width=384, fourier_modes=9, fourier_layers=2,
                  hidden_size=192, gru_layers=2, dropout=0.2, rnn_backend="auto",

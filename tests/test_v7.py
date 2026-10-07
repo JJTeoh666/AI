@@ -107,7 +107,7 @@ class V7Test(unittest.TestCase):
             MaestroWindows(self.root, "train", random_windows=True, bass_sampling=0.8, treble_sampling=0.3)
 
     def test_edge_loss_emphasizes_both_missed_and_false_positive_keys(self):
-        weights = pitch_loss_weights()
+        weights = pitch_loss_weights(edge_loss_weight=2)
         for target_value in (0.0, 1.0):
             output = {head: torch.zeros(1, 10, 88, requires_grad=True)
                       for head in ("frame", "onset", "offset", "velocity")}
@@ -176,7 +176,8 @@ class V7Test(unittest.TestCase):
         self.assertEqual(saved["training_config"]["patience"], 0)
         self.assertEqual(saved["training_config"]["threshold_calibration"], "training")
         self.assertEqual(saved["training_config"]["threshold_objective"], "pitch_f03")
-        for key, value in (("bass_sampling", 0.3), ("treble_sampling", 0.3), ("edge_loss_weight", 2)):
+        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0),
+                           ("edge_loss_weight", 1), ("middle_loss_weight", 1)):
             self.assertEqual(saved["training_config"][key], value)
         self.assertEqual(saved["validation"]["calibration_candidates"], 1)
         self.assertEqual(saved["validation"]["calibration_search"], "parameters")
