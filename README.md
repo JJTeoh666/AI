@@ -159,12 +159,14 @@ python app.py
 
 1. Choose a checkpoint in **Model**. Use **Refresh** to discover saved models or **Browse model…** to open another checkpoint. The app prefers `piano-v8.pt` when it exists.
 2. Select **Choose WAV…** and open an uncompressed 16-bit PCM piano recording.
-3. Choose **Auto**, **CPU** or **CUDA**. Leave **Use model thresholds** checked, then select **Analyze**.
+3. Choose **Auto**, **CPU** or **CUDA**, the **Analysis overlap (s)** and **Overlap method**. The app starts with **Weighted average** and 2 seconds of overlap. Leave **Use model thresholds** checked, then select **Analyze**.
 4. Open **Staff** for a grand staff with five treble lines and five bass lines. **Staff zoom** adjusts the notation size from 75% to 200% (starting at 125%). Scroll the main content with the mouse wheel or right-hand scrollbar to view the larger score. **Previous** and **Next** change pages; **Notation tempo (BPM)** and **Update staff** adjust the approximate notation.
 5. Select the green **Play result** button in the fixed playback bar **at the bottom of the window**. Playback controls remain visible while the main content scrolls. Analyze a recording first, or load a saved transcription with **Open result JSON…**.
 
 | Control or view | Purpose |
 | --- | --- |
+| **Analysis overlap (s)** | Choose 0–4 seconds of shared audio between neighbouring analysis inputs; starts at 2 seconds. Analyze again to apply a change. |
+| **Overlap method** | Choose **Weighted average**, **50/50 average** or **Keep center**. Analyze again to apply a change. |
 | **Play result** | Hear detected notes, including chords, predicted velocity and sustain pedal. |
 | **Play original** | Hear the input WAV. |
 | **Stop** | Stop playback or cancel result-audio preparation. |
@@ -183,6 +185,44 @@ The **Volume** slider sits beside **Stop** and shows the current percentage. It 
 The **Gain** slider below Volume starts at **0 dB**. Try **+6 dB** for about twice the signal amplitude, or **+12 dB** for about four times. Volume and gain apply together; 0% volume still mutes at any gain. Loud peaks are limited to the 16-bit range; reduce gain if they sound distorted. Gain affects playback, and exported WAVs retain their rendered volume.
 
 To compare models, select another checkpoint and analyze the same audio again. Uncheck **Use model thresholds** to edit **Frame**, **Onset** and **Offset** individually; analyze again to apply the changes.
+
+### Analysis overlap
+
+The app processes consecutive **4-second sections**. **Analysis overlap (s)** controls extra audio context: half the selected overlap is added on each side. The default is **2 seconds** of overlap (**1 second per side**), increased from the previous 1-second overlap.
+
+| Section | Input with 2-second overlap | Input with 4-second overlap |
+| --- | --- | --- |
+| 4–8 seconds | 3–9 seconds | 2–10 seconds |
+| 8–12 seconds | 7–13 seconds | 6–14 seconds |
+
+**Keep center** retains only each section's central predictions. **Weighted average** (the app default) combines probabilities before thresholds and note decoding, using the same linear weights for frame, onset, offset, velocity and pedal. Across an overlap it gradually favours the later calculation, whose predictions are farther from its input's left edge. At an 8-second boundary with a 2-second overlap:
+
+| Time | Earlier calculation | Later calculation |
+| --- | ---: | ---: |
+| 7 seconds | 100% | 0% |
+| 7.5 seconds | 75% | 25% |
+| 8 seconds | 50% | 50% |
+| 8.5 seconds | 25% | 75% |
+| 9 seconds | 0% | 100% |
+
+**50/50 average** gives both calculations equal weight at every shared timestamp: `(earlier_probability + later_probability) / 2`. It averages probabilities after sigmoid for all five outputs, then decodes notes once. For the example above, every frame from 7 seconds up to (excluding) 9 seconds uses 50/50; at 9 seconds only the later calculation supplies the prediction. Unlike the linear blend, the equal average can change abruptly at the overlap's edges.
+
+Outside overlaps, one calculation supplies the prediction. With zero overlap, all three methods behave identically. Inputs are clipped at the recording's start and padded with silence past its end; predictions past the actual recording and duplicate FFT endpoint frames are excluded. The completed timeline is decoded once.
+
+Blending adds no model forward passes. It may smooth section boundaries, but can weaken onset or offset peaks; recognition improvement is not guaranteed. More overlap increases analysis time and memory use. FFT sizes, the 20 ms prediction interval and training settings stay the same. Compare all three methods on the same recording with the same overlap and thresholds.
+
+Exported JSON records `inference_config` with `chunk_seconds`, `context_seconds` (each side), `overlap_seconds` (shared between neighbours) and `overlap_blend` (`weighted`, `equal` or `crop`). Loading a result restores its selections; older files select **Keep center**. The Python inference APIs accept `overlap_blend="weighted"` or `overlap_blend="equal"`; their default and command-line transcription retain `crop`, with the existing overlap (1 second for multitask models, 0 for legacy frame-only models).
+
+A spot check on the current V8 checkpoint used the first 60 seconds of three validation recordings, with identical saved thresholds and 2-second overlap:
+
+| Measurement | Keep center | Weighted average | 50/50 average |
+| --- | ---: | ---: | ---: |
+| Pitch F0123 | 0.4267 | 0.4307 | 0.4356 |
+| Onset F1 | 0.8067 | 0.8111 | 0.8129 |
+| Note F1 with offsets | 0.5141 | 0.5184 | 0.5227 |
+| Total analysis time, CUDA | 2.70 s | 2.53 s | 2.55 s |
+
+50/50 scored highest on these three excerpts. They are a small comparison, and a single timing run does not establish a speed improvement. The checkpoint was unchanged. The [comparison report](diagnostics/overlap-blending-comparison.json) contains recording names, exact scores, per-pitch results, thresholds and timing details. Repeat it with `python diagnostics/compare_overlap.py`; it rotates the three methods' running order across recordings.
 
 ### Sampled piano sound
 

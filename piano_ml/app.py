@@ -23,6 +23,7 @@ from .playback import WavPlayer, playback_available
 from .viewer import active_at, draw_prediction, read_prediction, waveform_envelope
 
 PROJECT = Path(__file__).resolve().parent.parent
+OVERLAP_METHODS = {"Weighted average": "weighted", "50/50 average": "equal", "Keep center": "crop"}
 
 
 class PianoApp:
@@ -50,6 +51,8 @@ class PianoApp:
         self.threshold_details = tk.StringVar(value="")
         self.use_model_threshold = tk.BooleanVar(value=True)
         self.device = tk.StringVar(value="auto")
+        self.overlap_seconds = tk.DoubleVar(value=2.0)
+        self.overlap_method = tk.StringVar(value="Weighted average")
         self.status = tk.StringVar(value="Choose a model and a piano WAV, then select Analyze.")
         self.summary = tk.StringVar(value="No analysis loaded")
         self.cursor_text = tk.StringVar(value="Click the timeline to inspect notes at a moment.")
@@ -130,6 +133,22 @@ class PianoApp:
             self.threshold_boxes.append(box)
         self.threshold_box = self.threshold_boxes[0]
         ttk.Label(outer, textvariable=self.threshold_details, wraplength=1150).pack(anchor="w", pady=(3, 0))
+        overlap_options = ttk.Frame(outer)
+        overlap_options.pack(fill="x", pady=(8, 0))
+        ttk.Label(overlap_options, text="Analysis overlap (s)").pack(side="left")
+        self.overlap_box = ttk.Combobox(overlap_options, values=(0, 1, 2, 3, 4),
+                                        textvariable=self.overlap_seconds, state="readonly", width=5)
+        self.overlap_box.pack(side="left", padx=8)
+        ttk.Label(overlap_options, text="Shared audio between 4-second sections; more overlap takes longer.",
+                  wraplength=600).pack(side="left")
+        blend_options = ttk.Frame(outer)
+        blend_options.pack(fill="x", pady=(6, 0))
+        ttk.Label(blend_options, text="Overlap method").pack(side="left")
+        self.overlap_method_box = ttk.Combobox(blend_options, values=tuple(OVERLAP_METHODS),
+                                               textvariable=self.overlap_method, state="readonly", width=18)
+        self.overlap_method_box.pack(side="left", padx=8)
+        ttk.Label(blend_options, text="Weighted blends gradually; 50/50 gives both calculations equal weight.",
+                  wraplength=550).pack(side="left")
         options = ttk.Frame(outer)
         options.pack(fill="x", pady=(10, 10))
         ttk.Label(options, text="Device").pack(side="left")
@@ -341,6 +360,12 @@ class PianoApp:
             thresholds = {} if self.use_model_threshold.get() else Thresholds(
                 frame=float(self.threshold.get()), onset=float(self.onset_threshold.get()),
                 offset=float(self.offset_threshold.get())).to_dict()
+            overlap = float(self.overlap_seconds.get())
+            if overlap not in (0, 1, 2, 3, 4):
+                raise ValueError("Choose an analysis overlap from 0 to 4 seconds.")
+            if self.overlap_method.get() not in OVERLAP_METHODS:
+                raise ValueError("Choose a valid overlap method.")
+            overlap_blend = OVERLAP_METHODS[self.overlap_method.get()]
             if not audio.is_file():
                 raise ValueError("Choose an existing piano WAV file.")
             if not model.is_file():
@@ -354,12 +379,14 @@ class PianoApp:
         self.progress["value"] = 0
         self.status.set(f"Loading {model.name} and analyzing {audio.name}…")
         device = self.device.get()
-        threading.Thread(target=self._worker, args=(audio, model, thresholds, device), daemon=True).start()
+        threading.Thread(target=self._worker, args=(audio, model, thresholds, device, overlap, overlap_blend), daemon=True).start()
 
     def set_busy(self, busy: bool, kind=None) -> None:
         self.busy = busy
         self.task_kind = kind if busy else None
         self.analyze_button.configure(state="disabled" if busy else "normal")
+        self.overlap_box.configure(state="disabled" if busy else "readonly")
+        self.overlap_method_box.configure(state="disabled" if busy else "readonly")
         self.cancel_button.configure(state="normal" if busy else "disabled", command=self.cancel_active)
         state = "normal" if self.player and not busy else "disabled"
         self.play_result_button.configure(state=state)
@@ -371,12 +398,13 @@ class PianoApp:
         self.audio_cancel.set()
         self.status.set("Cancelling the current task…")
 
-    def _worker(self, audio, model, thresholds, device) -> None:
+    def _worker(self, audio, model, thresholds, device, overlap_seconds, overlap_blend) -> None:
         try:
             result = transcribe_audio(audio, model, device=device,
                                      **{f"{head}_threshold": value for head, value in thresholds.items()},
                                      progress=lambda done, total: self.messages.put(("progress", (done, total))),
-                                     cancel=self.cancel_event)
+                                     cancel=self.cancel_event, context_seconds=overlap_seconds / 2,
+                                     overlap_blend=overlap_blend)
             envelope = waveform_envelope(audio)
             if self.cancel_event.is_set():
                 raise InterruptedError("Analysis cancelled.")
@@ -431,6 +459,11 @@ class PianoApp:
         self.rendered_result = None
         self.cursor_seconds = 0
         self.staff_page = 0
+        overlap = result.get("inference_config", {}).get("overlap_seconds")
+        if overlap in (0, 1, 2, 3, 4):
+            self.overlap_seconds.set(overlap)
+        blend = result.get("inference_config", {}).get("overlap_blend", "crop")
+        self.overlap_method.set(next((label for label, mode in OVERLAP_METHODS.items() if mode == blend), "Keep center"))
         if result.get("model") and Path(result["model"]).is_file():
             model_path = Path(result["model"]).resolve()
             label = next((name for name, path in self.model_paths.items() if path.resolve() == model_path), str(model_path))

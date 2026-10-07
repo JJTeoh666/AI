@@ -834,10 +834,13 @@ class PipelineTest(unittest.TestCase):
                     output[key][0, sample // 320, 39] = 4.0
                 return output
 
-        with patch("piano_ml.inference.load_model", return_value=FakeOnsets()):
-            result = transcribe_audio(audio, "fake.pt", device="cpu")
-        self.assertEqual(len(result["notes"]), 1)
-        self.assertEqual((result["notes"][0]["start"], result["notes"][0]["end"]), (3.98, 4.24))
+        for context in (None, 1, 2):
+            for blend in ("crop", "weighted", "equal"):
+                with self.subTest(context=context, blend=blend), patch("piano_ml.inference.load_model", return_value=FakeOnsets()):
+                    result = transcribe_audio(audio, "fake.pt", device="cpu", context_seconds=context,
+                                              overlap_blend=blend)
+                    self.assertEqual(len(result["notes"]), 1)
+                    self.assertEqual((result["notes"][0]["start"], result["notes"][0]["end"]), (3.98, 4.24))
 
     def test_result_playback_uses_pedal_and_velocity(self):
         result = {"duration": 1.2, "notes": [{"pitch": 69, "start": 0.1, "end": 0.4, "velocity": 100}],
