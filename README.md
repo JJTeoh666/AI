@@ -34,18 +34,18 @@ Training uses [MAESTRO v3.0.0](https://magenta.withgoogle.com/datasets/maestro):
 
 ### Current local inventory
 
-Verified on **2026-10-06**:
+Verified on **2026-10-07**, counting active recordings:
 
 | Split | Complete recordings |
 | --- | ---: |
-| Training | 53 |
+| Training | 51 |
 | Validation | 16 |
 | Test | 4 |
-| **Total** | **73** |
+| **Total** | **71** |
 
-Paired files occupy **3.885 GB**. The latest addition supplied **991 MB**, 12 training recordings, 93.6 minutes of audio and 55,649 piano note events, including 7,215 bass strikes and 4,471 treble strikes. All 24 added files passed size and CRC32 verification and were read through the training dataset. Details: [download verification](diagnostics/training-data-addition-2026-10-06.json).
+The latest replacement supplies **994 MB / 17 new training recordings** focused on **MIDI 30–68 (F♯1–G♯4)**. It retires **998 MB / 19 recordings** from active training. Active paired files occupy **3.881 GB**; retaining inactive backups brings all paired files to **4.879 GB**. Focus-range note events increase from **110,976 to 119,110**. Validation/test files and existing V8 checkpoints are unchanged. Details: [replacement verification](diagnostics/training-focus-refresh-2026-10-07.json).
 
-Training includes every complete local pair in the official training split when `--max-files` is omitted. A running process keeps the file list it loaded at startup; restart or resume it to include newly downloaded recordings.
+Training includes complete local pairs in the official training split, excluding names in `data/maestro/training-exclusions.json`, when `--max-files` is omitted. A running process keeps its startup file list; restart or resume it to use the replacement. Retired WAV/MIDI files stay at their original paths as inactive backups.
 
 ### Download data
 
@@ -71,6 +71,16 @@ python -m piano_ml download --data data/maestro --bass-gb 1
 
 This also uses only training pairs. It caches a separate, verified 56 MB MIDI index in `data/maestro/.bass-index/` and saves `bass-download-plan.json`. `--dry-run` prepares the index and plan without downloading audio.
 
+Replace about **1 GB** with new recordings rich in the current focus range, **MIDI 30–68 inclusive**:
+
+```powershell
+python -m piano_ml download --data data/maestro --replace-middle-gb 1
+```
+
+Add `--dry-run` to preview the selection. Candidates must have at least 75% of piano notes within the focus range; ranking favors scarce focus pitches per byte. The command retires training recordings with lower focus fractions, verifies all new WAV/MIDI sizes and CRC32 checksums in staging, and then switches the active list. It uses only the official training split. The official CSV and validation/test recordings stay unchanged.
+
+The latest manifest is `data/maestro/middle-refresh-plan.json`; individual runs are retained in `.middle-refresh-manifests/`. Backups consume disk space, so this replaces active data without freeing the old files' storage. To restore a retired pair to active training, remove its `audio_filename` from `excluded_audio_filenames` in `training-exclusions.json` and restart training. Repeating the download command replaces another batch.
+
 To expand validation to a **target total** of 24 recordings:
 
 ```powershell
@@ -95,7 +105,9 @@ python -m piano_ml train --data data/maestro `
 
 This starts V8 with random weights and three random global thresholds in 0.35–0.65. A new random seed is printed and saved; add `--seed 42` for repeatable initialization. Choose a new `--output` filename for an independent experiment.
 
-With the current inventory and these settings, an epoch contains **1,696 training windows / 424 batches** and **256 fixed validation windows**. Windows are four seconds long. Training samples 30% of windows around bass notes, 30% around treble notes and 40% ordinarily, with augmentation. Validation uses ordinary deterministic windows.
+With the current inventory and these settings, an epoch contains **1,632 training windows / 408 batches** and **256 fixed validation windows**. Windows are four seconds long. V8 samples **60% around notes in MIDI 30–68**, using inverse square-root pitch counts to favor rare notes, and **40% ordinarily**, with augmentation. An empty focus pool falls back to ordinary windows. Validation uses ordinary deterministic windows.
+
+V8 gives errors on MIDI 30–68 **weight 2**, and other keys **weight 1**, including missed notes and false positives. These normalized weights affect frame/onset/offset, release and velocity objectives, and the learned-threshold objective. All 88 keys remain predicted and evaluated; pedal supervision stays the same. The focus controls are `--middle-sampling`, `--middle-min-note`, `--middle-max-note` and `--middle-loss-weight`. Bass and treble sampling default to zero in V8; all three sampling fractions must sum to at most 1. Older architectures retain their original defaults.
 
 ### Resume training
 
@@ -107,13 +119,28 @@ python -m piano_ml train --data data/maestro `
   --epochs 50 --windows-per-file 32 --batch-size 4 --device auto
 ```
 
-On resume, `--epochs 50` means **50 additional epochs**. Saved weights, thresholds, optimizer, scheduler, epoch, random state and training emphasis are restored. Keep the same `--seconds` and `--windows-per-file` to preserve the validation comparison. Auto resume retains the checkpoint's architecture, including older models.
+On resume, `--epochs 50` means **50 additional epochs**. Saved weights, thresholds, optimizer, scheduler, epoch, random state and training emphasis are restored. Older V8 checkpoints without `middle_sampling` automatically adopt the new MIDI 30–68 emphasis; explicit CLI controls override it. Checkpoints saved with the new focus settings retain those settings on subsequent resumes. Keep the same `--seconds` and `--windows-per-file` to preserve the validation comparison. Auto resume retains the checkpoint's architecture, including older models.
 
 Ctrl+C discards an incomplete epoch; the latest completed checkpoint remains available.
 
 **After adding data or resuming a previously stopped run:** use the resume command above. Early stopping has been removed for all model versions; old checkpoint stop counts cannot end a new run. Existing commands containing `--patience` are still accepted, but that option is ignored.
 
 Supply `--lr` or `--threshold-lr` to override a restored learning rate. `--reset-optimizer` deliberately starts fresh optimizer and scheduler states; use it when that is the intended experiment.
+
+### Continue with the refreshed data and focus
+
+The data and code are ready; launch this separate continuation run when ready:
+
+```powershell
+python -m piano_ml train --data data/maestro `
+  --resume checkpoints/piano-v8.last.pt --output checkpoints/piano-v8-middle.pt `
+  --middle-sampling 0.6 --middle-min-note 30 --middle-max-note 68 `
+  --middle-loss-weight 2 --bass-sampling 0 --treble-sampling 0 --edge-loss-weight 1 `
+  --reset-optimizer --lr 0.0001 --threshold-lr 0.001 `
+  --epochs 50 --windows-per-file 32 --batch-size 4 --augment --device auto
+```
+
+This continues the learned recognizer and thresholds, with fresh optimizer/scheduler states and explicit learning rates for the changed training distribution. It writes latest checkpoints under `piano-v8-middle`, preserving the original V8 files. A new `piano-v8-middle.pt` is saved when validation improves beyond the inherited best-score target; until then, the original best model remains available. Best-model selection remains validation **pitch F0123** across supported keys. A resumed run keeps the previous best-score target when validation settings match.
 
 ### Saved files and training length
 
@@ -149,7 +176,7 @@ epoch=101 train_total_loss=0.4875 train_frame_bce=0.0912 val_frame_bce=0.0798 ..
 
 Completed-epoch best/latest checkpoints also save `training_metrics` with `total_loss`, `frame_bce` and `loss_components`. Frame-only models report zero for unsupported components. New fields appear after restarting/resuming with this trainer; existing history lines remain unchanged, and older checkpoints can still resume.
 
-Training still uses augmentation, dropout and bass/treble sampling; validation uses evaluation mode and deterministic ordinary windows. These conditions can create a gap even with the same frame-loss formula. Reporting reuses existing predictions and adds no model forward passes. Use validation **pitch F0123** to judge recognition quality and select the best V8 checkpoint.
+Training still uses augmentation, dropout and focused sampling; validation uses evaluation mode and deterministic ordinary windows. These conditions can create a gap even with the same frame-loss formula. Reporting reuses existing predictions and adds no model forward passes. Use validation **pitch F0123** to judge recognition quality and select the best V8 checkpoint.
 
 ## Desktop app and playback
 

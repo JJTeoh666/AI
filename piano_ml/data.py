@@ -14,6 +14,7 @@ from torch.utils.data._utils.collate import default_collate
 
 from .midi import read_performance
 from .model import HOP_LENGTH, LOW_NOTE, N_NOTES, SAMPLE_RATE
+from .middle_data import read_training_exclusions, FOCUS_LOW_NOTE, FOCUS_HIGH_NOTE
 
 
 def read_wav_window(path: str | Path, start: float = 0.0, duration: float | None = None) -> np.ndarray:
@@ -44,6 +45,9 @@ def load_records(root: str | Path, split: str) -> list[dict]:
         raise FileNotFoundError(f"Missing {csv_path}; run the download command first")
     with csv_path.open(newline="", encoding="utf-8") as handle:
         records = [row for row in csv.DictReader(handle) if row["split"] == split]
+    if split == "train":
+        excluded = read_training_exclusions(root)
+        records = [row for row in records if row["audio_filename"] not in excluded]
     available = [r for r in records if (root / r["audio_filename"]).exists()
                  and (root / r["midi_filename"]).exists()]
     if not available:
@@ -57,7 +61,8 @@ class MaestroWindows(Dataset):
                  max_files: int | None = None, multi_target: bool = False,
                  augment: bool = False, bass_sampling: float = 0.0,
                  bass_max_note: int = 47, treble_sampling: float = 0.0,
-                 treble_min_note: int = 84) -> None:
+                 treble_min_note: int = 84, middle_sampling: float = 0.0,
+                 middle_min_note: int = FOCUS_LOW_NOTE, middle_max_note: int = FOCUS_HIGH_NOTE) -> None:
         if seconds <= 0 or windows_per_file < 1:
             raise ValueError("Window duration and windows per file must be positive.")
         self.root = Path(root)
@@ -70,25 +75,30 @@ class MaestroWindows(Dataset):
         self.multi_target = multi_target
         self.augment = augment
         self._performances: dict[str, tuple] = {}
-        if any(not math.isfinite(value) or not 0 <= value <= 1 for value in (bass_sampling, treble_sampling)):
-            raise ValueError("Bass and treble sampling fractions must be between zero and one.")
-        if bass_sampling + treble_sampling > 1:
-            raise ValueError("Bass and treble sampling fractions must sum to at most one.")
+        if any(not math.isfinite(value) or not 0 <= value <= 1 for value in (bass_sampling, treble_sampling, middle_sampling)):
+            raise ValueError("Pitch sampling fractions must be between zero and one.")
+        if bass_sampling + treble_sampling + middle_sampling > 1:
+            raise ValueError("Pitch sampling fractions must sum to at most one.")
         if not LOW_NOTE <= bass_max_note < LOW_NOTE + N_NOTES:
             raise ValueError("Bass maximum pitch must be a piano MIDI note (21–108).")
         if not LOW_NOTE <= treble_min_note < LOW_NOTE + N_NOTES:
             raise ValueError("Treble minimum pitch must be a piano MIDI note (21–108).")
         if bass_sampling and treble_sampling and bass_max_note >= treble_min_note:
             raise ValueError("Bass and treble sampling ranges must not overlap.")
-        if (bass_sampling or treble_sampling) and (split != "train" or not random_windows):
-            raise ValueError("Bass and treble sampling are only available for random training windows.")
+        if not LOW_NOTE <= middle_min_note <= middle_max_note < LOW_NOTE + N_NOTES:
+            raise ValueError("Middle focus must be an inclusive piano MIDI range (21-108).")
+        if (bass_sampling or treble_sampling or middle_sampling) and (split != "train" or not random_windows):
+            raise ValueError("Pitch-focused sampling is only available for random training windows.")
         self.bass_sampling = bass_sampling
         self.treble_sampling = treble_sampling
+        self.middle_sampling = middle_sampling
+        self.middle_min_note, self.middle_max_note = middle_min_note, middle_max_note
         self.bass_anchors = []
         self.bass_cumulative = []
         self.treble_anchors = []
         self.treble_cumulative = []
-        if bass_sampling or treble_sampling:
+        self.middle_anchors, self.middle_cumulative = [], []
+        if bass_sampling or treble_sampling or middle_sampling:
             for row in self.records:
                 performance = read_performance(self.root / row["midi_filename"])
                 self._performances[row["midi_filename"]] = performance
@@ -99,8 +109,11 @@ class MaestroWindows(Dataset):
                         self.bass_anchors.append((row, note))
                     if treble_sampling and treble_min_note <= note.pitch < LOW_NOTE + N_NOTES:
                         self.treble_anchors.append((row, note))
+                    if middle_sampling and middle_min_note <= note.pitch <= middle_max_note:
+                        self.middle_anchors.append((row, note))
             for anchors, cumulative in ((self.bass_anchors, self.bass_cumulative),
-                                         (self.treble_anchors, self.treble_cumulative)):
+                                         (self.treble_anchors, self.treble_cumulative),
+                                         (self.middle_anchors, self.middle_cumulative)):
                 counts = Counter(note.pitch for _, note in anchors)
                 total = 0.0
                 for _, note in anchors:
@@ -113,12 +126,14 @@ class MaestroWindows(Dataset):
     def __getitem__(self, index: int):
         row = self.records[index // self.windows_per_file]
         anchor = None
-        if self.bass_sampling or self.treble_sampling:
+        if self.bass_sampling or self.treble_sampling or self.middle_sampling:
             draw = random.random()
             if draw < self.bass_sampling and self.bass_anchors:
                 row, anchor = random.choices(self.bass_anchors, cum_weights=self.bass_cumulative, k=1)[0]
             elif self.bass_sampling <= draw < self.bass_sampling + self.treble_sampling and self.treble_anchors:
                 row, anchor = random.choices(self.treble_anchors, cum_weights=self.treble_cumulative, k=1)[0]
+            elif self.bass_sampling + self.treble_sampling <= draw < self.bass_sampling + self.treble_sampling + self.middle_sampling and self.middle_anchors:
+                row, anchor = random.choices(self.middle_anchors, cum_weights=self.middle_cumulative, k=1)[0]
         duration = float(row["duration"])
         latest_start = max(0.0, duration - self.seconds)
         slot = index % self.windows_per_file

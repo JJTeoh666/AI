@@ -14,6 +14,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from .data import MaestroWindows, collate_windows
+from .middle_data import FOCUS_LOW_NOTE, FOCUS_HIGH_NOTE
 from .calibration import Calibration
 from .inference import get_device
 from .thresholds import Thresholds, saved_thresholds, threshold_grid, requested_grid
@@ -105,15 +106,24 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
 
 
 def pitch_loss_weights(bass_max_note=47, treble_min_note=84, edge_loss_weight=2.0,
-                       device=None):
-    """Weight both positive and negative errors on the lowest/highest keys."""
+                       device=None, middle_loss_weight=1.0,
+                       middle_min_note=FOCUS_LOW_NOTE, middle_max_note=FOCUS_HIGH_NOTE):
+    """Weight positive and negative errors; explicit middle emphasis overrides edges."""
     if not LOW_NOTE <= bass_max_note < treble_min_note <= HIGH_NOTE:
         raise ValueError("Focus ranges must be disjoint piano MIDI ranges (21–108).")
     if not math.isfinite(edge_loss_weight) or edge_loss_weight <= 0:
         raise ValueError("Edge loss weight must be finite and positive.")
+    if not math.isfinite(middle_loss_weight) or middle_loss_weight <= 0:
+        raise ValueError("Middle loss weight must be finite and positive.")
+    if not LOW_NOTE <= middle_min_note <= middle_max_note <= HIGH_NOTE:
+        raise ValueError("Middle focus must be an inclusive piano MIDI range (21-108).")
     pitches = torch.arange(LOW_NOTE, HIGH_NOTE + 1, device=device)
-    return torch.where((pitches <= bass_max_note) | (pitches >= treble_min_note),
-                       float(edge_loss_weight), 1.0)
+    weights = torch.where((pitches <= bass_max_note) | (pitches >= treble_min_note),
+                          float(edge_loss_weight), 1.0)
+    if middle_loss_weight != 1:
+        weights = torch.where((pitches >= middle_min_note) & (pitches <= middle_max_note),
+                              float(middle_loss_weight), weights)
+    return weights
 
 
 def training_loss_components(output, targets, positive_weight=5.0, event_weight=10.0,
@@ -288,20 +298,27 @@ def train(args) -> None:
     if not isinstance(calibration_every, int) or calibration_every < 1:
         raise ValueError("Calibration interval must be a positive integer.")
     training_options = {}
-    for name, default in (("bass_sampling", 0.3 if balanced else 0.5 if multires else 0.0), ("bass_max_note", 47),
-                          ("treble_sampling", 0.3 if balanced else 0.0), ("treble_min_note", 84),
-                          ("edge_loss_weight", 2.0 if balanced else 1.0),
+    legacy_v8_emphasis = fourier and "middle_sampling" not in prior
+    for name, default in (("bass_sampling", 0.0 if fourier else 0.3 if balanced else 0.5 if multires else 0.0), ("bass_max_note", 47),
+                          ("treble_sampling", 0.0 if fourier else 0.3 if balanced else 0.0), ("treble_min_note", 84),
+                          ("middle_sampling", 0.6 if fourier else 0.0),
+                          ("middle_min_note", FOCUS_LOW_NOTE), ("middle_max_note", FOCUS_HIGH_NOTE),
+                          ("edge_loss_weight", 1.0 if fourier else 2.0 if balanced else 1.0),
+                          ("middle_loss_weight", 2.0 if fourier else 1.0),
                           ("offset_loss_weight", 1.0 if multires else 0.5),
                           ("release_loss_weight", 0.25 if multires else 0.0)):
         value = getattr(args, name, None)
-        training_options[name] = prior.get(name, default) if value is None else value
+        previous = {} if legacy_v8_emphasis and name in ("bass_sampling", "treble_sampling", "edge_loss_weight") else prior
+        training_options[name] = previous.get(name, default) if value is None else value
     if any(not math.isfinite(training_options[name]) or training_options[name] < 0
            for name in ("offset_loss_weight", "release_loss_weight")):
         raise ValueError("Offset and release loss weights must be finite and nonnegative.")
     pitch_weights = None
-    if balanced or training_options["edge_loss_weight"] != 1:
+    if balanced or training_options["edge_loss_weight"] != 1 or training_options["middle_loss_weight"] != 1:
         pitch_weights = pitch_loss_weights(training_options["bass_max_note"],
-            training_options["treble_min_note"], training_options["edge_loss_weight"], device)
+            training_options["treble_min_note"], training_options["edge_loss_weight"], device,
+            middle_loss_weight=training_options["middle_loss_weight"],
+            middle_min_note=training_options["middle_min_note"], middle_max_note=training_options["middle_max_note"])
     threshold_options = {name: getattr(args, name, None) if getattr(args, name, None) is not None
                          else prior.get(name, default) for name, default in (
                              ("threshold_lr", 0.003 if balanced else 0.01), ("threshold_loss_weight", 1.0),
@@ -316,7 +333,9 @@ def train(args) -> None:
                                random_windows=True, max_files=args.max_files,
                                multi_target=True, augment=augment,
                                bass_sampling=training_options["bass_sampling"], bass_max_note=training_options["bass_max_note"],
-                               treble_sampling=training_options["treble_sampling"], treble_min_note=training_options["treble_min_note"])
+                               treble_sampling=training_options["treble_sampling"], treble_min_note=training_options["treble_min_note"],
+                               middle_sampling=training_options["middle_sampling"],
+                               middle_min_note=training_options["middle_min_note"], middle_max_note=training_options["middle_max_note"])
     val_set = MaestroWindows(args.data, "validation", args.seconds, max(1, args.windows_per_file // 2),
                              max_files=args.max_files, multi_target=True)
     loader_options = {"batch_size": args.batch_size, "num_workers": args.workers, "collate_fn": collate_windows}
@@ -446,9 +465,16 @@ def train(args) -> None:
     if training_options["treble_sampling"]:
         print(f"Treble-focused window fraction={training_options['treble_sampling']:.2f}; "
               f"{len(train_set.treble_anchors)} training treble strikes indexed; validation sampling unchanged", flush=True)
+    if training_options["middle_sampling"]:
+        print(f"Middle-focused window fraction={training_options['middle_sampling']:.2f}; "
+              f"MIDI {train_set.middle_min_note}-{train_set.middle_max_note}; "
+              f"{len(train_set.middle_anchors)} training middle strikes indexed; validation sampling unchanged", flush=True)
+        if resume and legacy_v8_emphasis:
+            print("Older V8 checkpoint: applying the new middle-note emphasis; explicit pitch sampling/loss options override it.", flush=True)
     if balanced:
         threshold_scores = "F0,F1,F2,F3" if fourier else "F0,F3"
         print(f"Bass/treble error weight={training_options['edge_loss_weight']:g}; "
+              f"middle error weight={training_options['middle_loss_weight']:g}; "
               f"threshold objective=smooth per-pitch mean({threshold_scores}); validation uses decoded notes", flush=True)
     if not comparable and (resume or init_from and complete_transfer):
         initial_metrics = validation_score()

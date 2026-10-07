@@ -10,6 +10,7 @@ from .training import train, score
 from .evaluation import evaluate
 from .piano_assets import install_piano
 from .bass_data import download_bass
+from .middle_data import refresh_middle_training
 
 
 def threshold_list(value: str) -> list[float]:
@@ -37,6 +38,11 @@ def predict(args: argparse.Namespace) -> None:
 
 
 def download(args):
+    replace_middle_gb = getattr(args, "replace_middle_gb", None)
+    if replace_middle_gb is not None:
+        if args.bass_gb is not None or args.additional_gb is not None or args.validation_total is not None or args.train_only:
+            raise ValueError("Use --replace-middle-gb separately from other download modes.")
+        return refresh_middle_training(args.data, replace_middle_gb, dry_run=args.dry_run)
     if args.train_only and (args.additional_gb is None or args.bass_gb is not None
                             or args.validation_total is not None):
         raise ValueError("Use --train-only with --additional-gb.")
@@ -67,7 +73,8 @@ def main() -> None:
     dl.add_argument("--additional-gb", type=float, help="Add this many GB of usable files using a random, size-limited selection")
     dl.add_argument("--train-only", action="store_true", help="With --additional-gb, spend the entire budget on official training pairs")
     dl.add_argument("--bass-gb", type=float, help="Add this many GB of official training pairs ranked by rare bass-note coverage")
-    dl.add_argument("--dry-run", action="store_true", help="With --bass-gb or --additional-gb, save a plan without downloading files")
+    dl.add_argument("--replace-middle-gb", type=float, help="Replace this many GB of active training recordings with new pairs rich in MIDI 30-68; keep old files as inactive backups")
+    dl.add_argument("--dry-run", action="store_true", help="With budgeted download modes, save a plan without downloading audio files")
     dl.add_argument("--validation-total", type=int, help="Expand only the official validation split to this many local recordings")
     dl.add_argument("--validation-budget-gb", type=float, default=1.0, help="Additional validation download limit; default 1 GB")
     dl.add_argument("--seed", type=int, default=42)
@@ -86,11 +93,15 @@ def main() -> None:
     tr.add_argument("--fourier-layers", type=int, help="V8 trainable Fourier mixing blocks, default 2")
     tr.add_argument("--long-fft", type=int, help="Version 6–8 long FFT size, default 8192")
     tr.add_argument("--release-frames", type=int, help="Version 6–8 consecutive inactive frames needed to end a note, default 3")
-    tr.add_argument("--bass-sampling", type=float, help="Fraction of windows anchored on bass notes: v7/v8 default 0.3, v6 0.5, older models 0")
+    tr.add_argument("--bass-sampling", type=float, help="Fraction of windows anchored on bass notes: v8 default 0, v7 0.3, v6 0.5, older models 0")
     tr.add_argument("--bass-max-note", type=int, help="Highest MIDI pitch for bass sampling, default 47 (B2)")
-    tr.add_argument("--treble-sampling", type=float, help="Fraction anchored on treble notes: v7/v8 default 0.3, older models 0; bass + treble must be <= 1")
+    tr.add_argument("--treble-sampling", type=float, help="Fraction anchored on treble notes: v8 default 0, v7 0.3; bass + middle + treble must be <= 1")
+    tr.add_argument("--middle-sampling", type=float, help="Fraction anchored in the middle focus range: v8 default 0.6, other versions 0")
+    tr.add_argument("--middle-min-note", type=int, help="Inclusive lower MIDI pitch for middle focus (default 30)")
+    tr.add_argument("--middle-max-note", type=int, help="Inclusive upper MIDI pitch for middle focus (default 68)")
     tr.add_argument("--treble-min-note", type=int, help="Lowest MIDI pitch for treble sampling, default 84 (C6)")
-    tr.add_argument("--edge-loss-weight", type=float, help="Error multiplier on bass/treble keys, including false positives: v7/v8 default 2, older models 1")
+    tr.add_argument("--edge-loss-weight", type=float, help="Error multiplier on bass/treble keys, including false positives: v8 default 1, v7 2, older models 1")
+    tr.add_argument("--middle-loss-weight", type=float, help="Error multiplier on middle keys, including false positives: v8 default 2, other versions 1")
     tr.add_argument("--offset-loss-weight", type=float, help="Offset loss scale: v6–v8 default 1; older models 0.5")
     tr.add_argument("--release-loss-weight", type=float, help="Additional frame loss around releases: v6–v8 default 0.25; older models 0")
     tr.add_argument("--threshold-calibration", choices=("training", "validation"),

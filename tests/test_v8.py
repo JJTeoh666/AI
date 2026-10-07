@@ -178,7 +178,10 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(saved["training_config"]["threshold_calibration"], "training")
         self.assertEqual(saved["training_config"]["patience"], 0)
         self.assertFalse(saved["training_config"]["early_stopping"])
-        self.assertEqual(saved["training_config"]["treble_sampling"], 0.3)
+        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0.6),
+                           ("middle_min_note", 30), ("middle_max_note", 68),
+                           ("middle_loss_weight", 2), ("edge_loss_weight", 1)):
+            self.assertEqual(saved["training_config"][key], value)
         self.assertEqual(saved["validation"]["calibration_candidates"], 1)
         self.assertEqual(saved["validation"]["calibration_search"], "parameters")
         history_path = checkpoint.with_suffix(".history.jsonl")
@@ -200,6 +203,9 @@ class V8PipelineTest(unittest.TestCase):
         # Mimic an older checkpoint without reporting fields, retaining its comparison state.
         saved.pop("training_metrics")
         saved["validation"].pop("frame_bce")
+        for key in ("middle_sampling", "middle_min_note", "middle_max_note", "middle_loss_weight"):
+            saved["training_config"].pop(key)
+        saved["training_config"].update(bass_sampling=0.3, treble_sampling=0.3, edge_loss_weight=2)
         torch.save(saved, latest)
         with redirect_stdout(io.StringIO()):
             train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
@@ -208,6 +214,10 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(resumed["epoch"], 2)
         self.assertEqual(resumed["validation_signature"], saved["validation_signature"])
         self.assertEqual(resumed["model_config"], saved["model_config"])
+        for key, value in (("bass_sampling", 0), ("treble_sampling", 0), ("middle_sampling", 0.6),
+                           ("middle_min_note", 30), ("middle_max_note", 68),
+                           ("middle_loss_weight", 2), ("edge_loss_weight", 1)):
+            self.assertEqual(resumed["training_config"][key], value)
         self.assertIn("frame_bce", resumed["validation"])
         self.assertIn("training_metrics", resumed)
         self.assertTrue(history_path.read_text().startswith(original_history))
@@ -219,6 +229,20 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(result["architecture"], "onsets-fourier-recurrent")
         self.assertEqual(len(result["thresholds"]), 3)
         self.assertNotIn("register_thresholds", result)
+
+    def test_custom_middle_emphasis_is_restored_on_resume(self):
+        checkpoint = self.root / "custom.pt"
+        settings = dict(middle_sampling=0.5, middle_min_note=35, middle_max_note=65,
+                        middle_loss_weight=3, bass_sampling=0.1, treble_sampling=0.1, edge_loss_weight=1.5)
+        with redirect_stdout(io.StringIO()):
+            train(self.options(checkpoint, **settings))
+            train(self.options(checkpoint, resume=str(self.root / "custom.last.pt"), lr=None,
+                               hidden_size=None, gru_layers=None, feature_width=None,
+                               fourier_modes=None, fourier_layers=None))
+        saved = torch.load(self.root / "custom.last.pt", weights_only=True)
+        self.assertEqual(saved["epoch"], 2)
+        for key, value in settings.items():
+            self.assertEqual(saved["training_config"][key], value)
 
     def test_weighted_and_frozen_threshold_reporting_uses_existing_forward_passes(self):
         original_forward = FourierRecurrentPianoNet.forward
