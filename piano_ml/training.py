@@ -20,7 +20,8 @@ from .avgf import avgf_accumulators
 from .inference import get_device
 from .thresholds import Thresholds, saved_thresholds, threshold_grid, requested_grid
 from .model import (N_NOTES, LOW_NOTE, HIGH_NOTE, SAMPLE_RATE, HOP_LENGTH, build_model,
-                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE, FOURIER_MODEL_VERSION,
+                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE,
+                    FOUR_SCORE_ARCHITECTURES,
                     BALANCED_ARCHITECTURES, RECURRENT_CONV_ARCHITECTURES,
                     MULTIRES_ARCHITECTURES, default_selection_metric, checkpoint_format_version)
 
@@ -90,7 +91,7 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
                               release_frames=model_config(model).get("release_frames", 2))
     avgf = avgf_accumulators(model, calibration.grid, avgf_temperature, avgf_regularization)
     if selection_metric == "avgf_loss" and not avgf:
-        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
     frame_loss = _FrameBCEAccumulator()
     with torch.inference_mode():
         for waves, labels in loader:
@@ -227,9 +228,17 @@ def train(args) -> None:
     if not resume and config["architecture"] != "frame":
         source_config = (initialization or {}).get("model_config", {})
         fourier = config["architecture"] == FOURIER_ARCHITECTURE
+        four_score = config["architecture"] in FOUR_SCORE_ARCHITECTURES
         if fourier and initialization and source_config.get("architecture") != FOURIER_ARCHITECTURE:
             raise ValueError("Version 8 has a new structure. Start fresh, or use --init-from with another version 8 checkpoint.")
-        config.update(hidden_size=getattr(args, "hidden_size", None) or source_config.get("hidden_size", 192 if fourier else 128),
+        if config["architecture"] == V9_ARCHITECTURE and initialization and source_config.get("architecture") != V9_ARCHITECTURE:
+            raise ValueError("V9 has three branches and residual CNNs; V8.1 weights cannot transfer to this structure. Start fresh or initialize from a compatible V9 checkpoint.")
+        if config["architecture"] == V10_ARCHITECTURE and initialization and source_config.get("architecture") != V10_ARCHITECTURE:
+            raise ValueError("V10 uses harmonic CQT and long FFT branches; older model weights cannot transfer to this structure. Start fresh or initialize from a compatible V10 checkpoint.")
+        if config["architecture"] == V101_ARCHITECTURE and initialization and source_config.get("architecture") != V101_ARCHITECTURE:
+            raise ValueError("V10.1 uses short STFT and harmonic CQT branches; older model weights cannot transfer to this structure. Start fresh or initialize from a compatible V10.1 checkpoint.")
+        v10 = config["architecture"] in (V10_ARCHITECTURE, V101_ARCHITECTURE)
+        config.update(hidden_size=getattr(args, "hidden_size", None) or source_config.get("hidden_size", 128 if v10 or not four_score else 192),
                       gru_layers=getattr(args, "gru_layers", None) or source_config.get("gru_layers", 2),
                       dropout=source_config.get("dropout", 0.2),
                       rnn_backend=getattr(args, "rnn_backend", "auto"))
@@ -237,17 +246,27 @@ def train(args) -> None:
             conv_steps = getattr(args, "conv_steps", None)
             config["conv_steps"] = source_config.get("conv_steps", 3) if conv_steps is None else conv_steps
         if config["architecture"] in MULTIRES_ARCHITECTURES:
-            for name, default in (("long_fft", 8192), ("release_frames", 3)):
+            spectral_option = ("short_fft", 2048) if config["architecture"] == V101_ARCHITECTURE else ("long_fft", 8192)
+            for name, default in (spectral_option, ("release_frames", 3)):
                 value = getattr(args, name, None)
                 config[name] = source_config.get(name, default) if value is None else value
-        if fourier:
-            for name, default in (("feature_width", 384), ("fourier_modes", 9), ("fourier_layers", 2)):
+        if four_score:
+            dimensions = [("feature_width", 200 if v10 else 384)]
+            if fourier:
+                dimensions.extend((("fourier_modes", 9), ("fourier_layers", 2)))
+            for name, default in dimensions:
                 value = getattr(args, name, None)
                 config[name] = source_config.get(name, default) if value is None else value
     if not resume and getattr(args, "conv_steps", None) is not None and config["architecture"] not in RECURRENT_CONV_ARCHITECTURES:
         raise ValueError("--conv-steps requires --architecture onsets-recurrent.")
-    if any(getattr(args, name, None) is not None for name in ("feature_width", "fourier_modes", "fourier_layers")) and config["architecture"] != FOURIER_ARCHITECTURE:
-        raise ValueError("Fourier configuration requires --architecture onsets-fourier-recurrent.")
+    if getattr(args, "feature_width", None) is not None and config["architecture"] not in FOUR_SCORE_ARCHITECTURES:
+        raise ValueError("--feature-width requires a V8.1, V9, V10 or V10.1 architecture.")
+    if getattr(args, "short_fft", None) is not None and config["architecture"] != V101_ARCHITECTURE:
+        raise ValueError("--short-fft is specific to V10.1 (--architecture onsets-stft-cqt-harmonic-recurrent).")
+    if getattr(args, "long_fft", None) is not None and config["architecture"] == V101_ARCHITECTURE:
+        raise ValueError("V10.1 replaces the long FFT with CQT; use --short-fft for its STFT branch.")
+    if any(getattr(args, name, None) is not None for name in ("fourier_modes", "fourier_layers")) and config["architecture"] != FOURIER_ARCHITECTURE:
+        raise ValueError("--fourier-modes and --fourier-layers are specific to V8.1 (--architecture onsets-fourier-recurrent); V9, V10 and V10.1 use residual CNN blocks.")
     device = get_device(args.device)
     model = build_model(config).to(device)
     if resume:
@@ -257,12 +276,12 @@ def train(args) -> None:
         print(f"Transferred {'complete recognizer' if complete_transfer else 'CNN features'} from {init_from}; "
               "optimizer and epoch start fresh", flush=True)
     architecture = config["architecture"]
-    fourier = architecture == FOURIER_ARCHITECTURE
+    four_score = architecture in FOUR_SCORE_ARCHITECTURES
     balanced = architecture in BALANCED_ARCHITECTURES
     multires = architecture in MULTIRES_ARCHITECTURES
     learned = hasattr(model, "threshold_module")
     global_thresholds = learned and model.threshold_module.scope == "global"
-    suffix = f"-v{FOURIER_MODEL_VERSION}" if fourier else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
+    suffix = f"-v{model.model_version}" if four_score else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
     output = Path(args.output or f"checkpoints/piano{suffix}.pt")
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -295,7 +314,7 @@ def train(args) -> None:
         "threshold_calibration", "validation" if multires and not balanced else "training")
     validation_calibration = calibration_mode == "validation"
     if balanced and validation_calibration:
-        raise ValueError("Versions 7/8 use gradient threshold learning; use --threshold-calibration training.")
+        raise ValueError("Versions 7/8/9/10/10.1 use gradient threshold learning; use --threshold-calibration training.")
     if validation_calibration:
         if not global_thresholds or thresholds_only or freeze_thresholds:
             raise ValueError("Validation threshold calibration requires three global thresholds in joint training, without --freeze-thresholds.")
@@ -357,8 +376,8 @@ def train(args) -> None:
     if metric == "auto":
         metric = default_selection_metric(architecture)
     selection_mode = "min" if metric == "avgf_loss" else "max"
-    if metric == "avgf_loss" and not fourier:
-        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
+    if metric == "avgf_loss" and not four_score:
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
     if learned and any(getattr(args, name, None) is not None for name in (
             "thresholds", "frame_thresholds", "onset_thresholds", "offset_thresholds")):
         raise ValueError("The calibrated architecture learns its thresholds. Omit threshold grids while training.")
@@ -440,16 +459,16 @@ def train(args) -> None:
                 "training_config": {"augment": augment, "positive_weight": positive_weight,
                     "event_weight": event_weight, "threshold_grid": [] if learned else [values.to_dict() for values in grid],
                     "thresholds_only": thresholds_only, "freeze_thresholds": freeze_thresholds, **threshold_options,
-                    "threshold_objective": "pitch_f0123" if fourier else "pitch_f03" if balanced else "f1",
+                    "threshold_objective": "pitch_f0123" if four_score else "pitch_f03" if balanced else "f1",
                     "seconds": args.seconds, "windows_per_file": args.windows_per_file, "seed": seed,
                     "early_stopping": False, "patience": 0, "threshold_calibration": calibration_mode,
                     "calibration_values": calibration_values, "calibration_every": calibration_every,
                     "pitch_emphasis_version": PITCH_EMPHASIS_VERSION, **training_options}}
         if training_metrics is not None:
             payload["training_metrics"] = training_metrics
-        if fourier:
-            payload["model_version"] = FOURIER_MODEL_VERSION
-            payload["training_config"]["model_version"] = FOURIER_MODEL_VERSION
+        if four_score:
+            payload["model_version"] = model.model_version
+            payload["training_config"]["model_version"] = model.model_version
         return payload
 
     def validation_score(epoch=None):
@@ -468,7 +487,7 @@ def train(args) -> None:
         metrics = score(model, val_loader, device, selection_metric=metric,
                         min_note_seconds=minimum, threshold_configs=candidates,
                         **({"avgf_temperature": threshold_options["threshold_temperature"],
-                            "avgf_regularization": threshold_options["threshold_regularization"]} if fourier else {}))
+                            "avgf_regularization": threshold_options["threshold_regularization"]} if four_score else {}))
         if validation_calibration and saved_thresholds(metrics) != current:
             model.threshold_module.initialize(saved_thresholds(metrics))
         metrics.update(calibration_search=search,
@@ -480,7 +499,7 @@ def train(args) -> None:
         print(f"Restored {architecture} model at epoch {start_epoch}; optimizer={'restored' if restoring_optimizer else 'fresh'}", flush=True)
     elif not init_from:
         print(f"Fresh random initialization; seed={seed}; starting at epoch 1", flush=True)
-    version_label = f"V{FOURIER_MODEL_VERSION} " if fourier else ""
+    version_label = f"V{model.model_version} " if four_score else ""
     print(f"Training {version_label}{architecture} ({sum(p.numel() for p in model.parameters()):,} parameters) on "
           f"{len(train_set.records)} recordings; validating on {len(val_set.records)}; device={device}; "
           f"selection={metric}; epochs={args.epochs}; early_stopping=disabled; augmentation={augment}", flush=True)
@@ -504,7 +523,7 @@ def train(args) -> None:
                                                for name, default in pitch_emphasis_defaults.items()):
         print("Cleared saved pitch emphasis; explicit CLI pitch controls override the equal-note defaults", flush=True)
     if balanced:
-        threshold_scores = "F0,F1,F2,F3" if fourier else "F0,F3"
+        threshold_scores = "F0,F1,F2,F3" if four_score else "F0,F3"
         weight_summary = ("Equal error weights for all 88 piano keys; " if pitch_weights is None else
                           f"Bass/treble error weight={training_options['edge_loss_weight']:g}; "
                           f"middle error weight={training_options['middle_loss_weight']:g}; ")
@@ -568,8 +587,8 @@ def train(args) -> None:
                "epoch_seconds": time.perf_counter() - epoch_started,
                "calibration_search": metrics["calibration_search"],
                "calibration_candidates": metrics["calibration_candidates"]}
-        if fourier:
-            log["model_version"] = FOURIER_MODEL_VERSION
+        if four_score:
+            log["model_version"] = model.model_version
         if learned:
             log.update(threshold_loss=averages[1],
                        threshold_lr=optimizer.param_groups[1]["lr"])
@@ -580,7 +599,7 @@ def train(args) -> None:
             pitch_summary += (f"note_macro_f0={metrics['note_macro_f0']:.4f} "
                               f"note_macro_f3={metrics['note_macro_f3']:.4f} "
                               f"note_macro_f03={metrics['note_macro_f03']:.4f} ")
-        if fourier and "note_macro_f0123" in metrics:
+        if four_score and "note_macro_f0123" in metrics:
             pitch_summary += (f"note_macro_f2={metrics['note_macro_f2']:.4f} "
                               f"note_macro_f0123={metrics['note_macro_f0123']:.4f} ")
         threshold_digits = 6 if balanced else 2

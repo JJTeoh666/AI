@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Piano Notes — Listening Studio</title>
+  <meta name="description" content="Identify piano notes and chords, explore a grand staff, and play your transcription with a seekable piano player.">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand" aria-label="Piano Notes home"><span class="piano-mark" aria-hidden="true"><i></i><i></i><i></i></span>Piano Notes<span class="brand-sub">LISTENING STUDIO</span></a>
+    <span class="local-badge"><span></span>Local studio</span>
+  </header>
+  <main>
+    <section class="intro">
+      <div><h1>Piano transcription</h1><p class="subtitle">Choose a recording and model to explore the score and play the result.</p></div>
+      <button id="openResult" class="button secondary">Open result JSON</button>
+    </section>
+    <section id="engineConnection" class="connection card" aria-label="Connect the piano engine" hidden>
+      <div><h2 id="connectionTitle">Connect your piano engine</h2><p id="connectionHelp">On this computer, run <code>python web_app.py --sites</code> from <code>C:\jj\AI</code> and keep the terminal open. Connect below and allow local network access if your browser asks. V8.1 is selected by default.</p></div>
+      <div class="input-row"><label for="enginePort">Port</label><input id="enginePort" type="number" min="1" max="65535" value="8765"><button id="connectEngine" class="button primary">Connect piano engine</button></div>
+    </section>
+    <section class="setup card" aria-label="Recording and analysis controls">
+      <div class="setup-grid">
+        <div class="model-field">
+          <label class="field-title" for="model">01 <span>Choose your model</span></label>
+          <div class="input-row"><select id="model" aria-label="Model checkpoint"><option value="">Loading models…</option></select><button id="refreshModels" class="icon-button" title="Refresh models" aria-label="Refresh models">↻</button></div>
+          <div class="model-info"><span id="modelBadge" class="version-badge">MODEL</span><span id="modelDetails">Saved checkpoints appear here.</span></div>
+          <button id="browseModel" class="text-button">Browse checkpoint .pt</button>
+        </div>
+        <div>
+          <label class="field-title" for="audioFile">02 <span>Add a recording</span></label>
+          <button id="chooseAudio" class="upload-zone"><span class="upload-icon" aria-hidden="true">↥</span><span><strong id="audioName">Drop your piano WAV here</strong><small id="audioDescription">or click to browse · 16-bit PCM WAV</small></span><span class="upload-action">Choose file</span></button>
+        </div>
+      </div>
+      <details class="settings" open>
+        <summary>Analysis settings <span>Thresholds, overlap &amp; device</span></summary>
+        <div class="settings-grid">
+          <div><label for="device">Device</label><select id="device"><option value="auto">Auto</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select></div>
+          <div><label for="overlap">Shared overlap</label><select id="overlap"><option value="0">0 seconds</option><option value="1">1 second</option><option value="2" selected>2 seconds</option><option value="3">3 seconds</option><option value="4">4 seconds</option></select></div>
+          <div><label for="blend">Overlap method</label><select id="blend"><option value="weighted">Weighted average</option><option value="equal">50/50 average</option><option value="crop">Keep center</option></select></div>
+          <div class="thresholds"><label class="check-label"><input id="modelThresholds" type="checkbox" checked> Use model thresholds</label><div class="threshold-row"><label>Frame<input id="frameThreshold" type="number" min="0.001" max="0.999" step="0.001" value="0.5" disabled></label><label>Onset<input id="onsetThreshold" type="number" min="0.001" max="0.999" step="0.001" value="0.5" disabled></label><label>Offset<input id="offsetThreshold" type="number" min="0.001" max="0.999" step="0.001" value="0.5" disabled></label></div></div>
+        </div>
+      </details>
+      <div class="analyze-row"><div class="status-group"><span id="statusDot" class="status-dot"></span><span id="status" role="status" aria-live="polite">Choose a model and recording to begin.</span><progress id="taskProgress" hidden></progress></div><div class="input-row"><button id="cancelTask" class="button secondary" hidden>Cancel</button><button id="analyze" class="button primary" disabled><span aria-hidden="true">✦</span> Analyze recording</button></div></div>
+    </section>
+    <div id="error" class="error-banner" role="alert" hidden></div>
+    <section class="workspace card" aria-label="Transcription results">
+      <div class="workspace-header"><div><p class="eyebrow">YOUR TRANSCRIPTION</p><h2 id="resultTitle">A score waiting to happen.</h2></div><div class="exports"><button id="exportJSON" class="text-button" disabled>Export JSON ↓</button><button id="exportView" class="text-button" disabled>Save view ↓</button><button id="exportWAV" class="text-button" disabled>Save piano WAV ↓</button></div></div>
+      <div id="resultStats" class="result-stats" hidden><span><b id="noteCount">0</b> notes</span><span><b id="chordCount">0</b> chords</span><span><b id="recordingDuration">0:00</b> duration</span><span id="resultVersion"></span></div>
+      <div class="tab-row" role="tablist" aria-label="Result views"><button class="tab active" id="tab-staff" data-tab="staff" role="tab" aria-controls="pane-staff" aria-selected="true">Grand staff</button><button class="tab" id="tab-timeline" data-tab="timeline" role="tab" aria-controls="pane-timeline" aria-selected="false" tabindex="-1">Timeline</button><button class="tab" id="tab-notes" data-tab="notes" role="tab" aria-controls="pane-notes" aria-selected="false" tabindex="-1">Notes</button><button class="tab" id="tab-chords" data-tab="chords" role="tab" aria-controls="pane-chords" aria-selected="false" tabindex="-1">Chords</button></div>
+      <div id="empty" class="empty-state"><div class="empty-staff" aria-hidden="true"><span>♪</span></div><h3>Your music, written out.</h3><p>Analyze a recording or open a saved result to explore<br>notes, chords and a playable piano transcription.</p></div>
+      <section id="pane-staff" role="tabpanel" aria-labelledby="tab-staff" hidden>
+        <div class="view-toolbar"><div class="input-row"><label for="bpm">Notation tempo</label><input id="bpm" type="number" value="120" min="30" max="300" step="5"><span class="muted">BPM</span><label class="check-label"><input id="noteNames" type="checkbox"> Note names</label></div><div class="input-row"><label for="zoom">Zoom</label><input id="zoom" type="range" min="75" max="200" value="125" step="5"><output id="zoomLabel">125%</output></div><div class="page-controls"><button id="previousPage" class="icon-button" aria-label="Previous score page">←</button><span id="pageLabel">Page 1 / 1</span><button id="nextPage" class="icon-button" aria-label="Next score page">→</button></div></div>
+        <div class="figure-scroll"><div id="staffFigure" class="figure-wrap"><img id="staffImage" alt="Piano transcription on treble and bass five-line staves"><span id="staffCursor" class="plot-cursor" hidden></span></div></div>
+        <p class="view-hint">Click the score to seek. Notation spacing and durations are approximated at the selected tempo.</p>
+      </section>
+      <section id="pane-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden><div class="view-toolbar"><div class="input-row"><label for="timelineStart">Start</label><input id="timelineStart" type="number" min="0" step="0.1" value="0"><label for="timelineSpan">Show</label><input id="timelineSpan" type="number" min="0.02" step="0.1" value="10"><span class="muted">seconds</span></div><div class="input-row"><button id="previousWindow" class="icon-button" aria-label="Earlier timeline window">←</button><button id="fullTimeline" class="text-button">Full recording</button><button id="nextWindow" class="icon-button" aria-label="Later timeline window">→</button></div><span class="muted">Click the timeline to seek</span></div><div class="figure-scroll"><div id="timelineFigure" class="figure-wrap"><img id="timelineImage" alt="Audio waveform, detected piano notes and chords across time"><span id="timelineCursor" class="plot-cursor" hidden></span></div></div></section>
+      <section id="pane-notes" role="tabpanel" aria-labelledby="tab-notes" hidden><div class="table-toolbar"><label for="noteSearch">Find a note</label><input id="noteSearch" type="search" placeholder="C4, F♯, MIDI 60…"><span id="notesShown" class="muted"></span></div><div class="table-scroll"><table><thead><tr><th>Note</th><th>MIDI</th><th>Start</th><th>End</th><th>Duration</th><th>Confidence</th><th>Velocity</th></tr></thead><tbody id="notesBody"></tbody></table></div></section>
+      <section id="pane-chords" role="tabpanel" aria-labelledby="tab-chords" hidden><div class="table-scroll"><table><thead><tr><th>Chord</th><th>Start</th><th>End</th><th>Duration</th></tr></thead><tbody id="chordsBody"></tbody></table></div></section>
+      <div id="inspection" class="inspection" hidden><span id="inspectTime">0.00 s</span><span><small>NOTES</small> <b id="activeNotes">—</b></span><span><small>CHORD</small> <b id="activeChords">—</b></span></div>
+    </section>
+    <p class="footer-note">Your files stay on this computer. Recognition quality depends on the selected model and recording.</p>
+  </main>
+  <footer class="player" aria-label="Audio playback controls">
+    <div class="player-source"><div class="source-switch" role="group" aria-label="Playback source"><button id="sourceResult" class="selected" disabled>Result piano</button><button id="sourceOriginal" disabled>Original</button></div><small id="soundName">Piano playback</small></div>
+    <button id="playPause" class="play-button" aria-label="Play" disabled>▶</button><button id="stop" class="stop-button" aria-label="Stop and return to beginning" disabled>■</button>
+    <div class="scrubber"><div class="track-label"><span id="playerStatus" role="status">No audio loaded</span><span><output id="currentTime">0:00</output> <span class="muted">/</span> <output id="totalTime">0:00</output></span></div><input id="seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Playback position; drag to seek" disabled></div>
+    <div class="level-controls"><label for="volume">Volume <output id="volumeLabel">50%</output></label><input id="volume" type="range" min="0" max="100" value="50" step="1"><label for="gain">Gain <output id="gainLabel">+0 dB</output></label><input id="gain" type="range" min="0" max="24" value="0" step="1"></div>
+  </footer>
+  <audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+  <input id="audioFile" type="file" accept=".wav,audio/wav" hidden>
+  <input id="modelFile" type="file" accept=".pt" hidden>
+  <input id="resultFile" type="file" accept=".json,application/json" hidden>
+</body>
+</html>

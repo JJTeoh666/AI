@@ -1,0 +1,32 @@
+{
+  "recording": "C:\\jj\\AI\\diagnostics\\browser-clip.wav",
+  "piano": "same installed piano engine for both results",
+  "results": {
+    "own": {
+      "notes": 21,
+      "chords": 1,
+      "duration": 8.0,
+      "analysis_seconds": 0.48045939998701215,
+      "channels": 2,
+      "sample_rate": 44100,
+      "pcm_peak": 2582.0
+    },
+    "basic": {
+      "notes": 28,
+      "chords": 2,
+      "duration": 8.0,
+      "analysis_seconds": 0.20155179989524186,
+      "channels": 2,
+      "sample_rate": 44100,
+      "pcm_peak": 4053.0
+    }
+  },
+  "checks": [
+    "same WAV",
+    "real checkpoint and Basic Pitch inference",
+    "own settings preserved",
+    "separate cached piano WAVs",
+    "non-silent audio",
+    "JSON and audio export"
+  ]
+}

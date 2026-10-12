@@ -11,7 +11,7 @@ import torch
 
 from .data import read_wav_window
 from .decode import decode, decode_outputs
-from .model import HOP_LENGTH, SAMPLE_RATE, FOURIER_ARCHITECTURE, build_model, model_config
+from .model import HOP_LENGTH, SAMPLE_RATE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE, build_model, model_config
 from .thresholds import saved_thresholds, Thresholds
 
 
@@ -43,6 +43,12 @@ def load_model(checkpoint: str | Path, device: torch.device) -> torch.nn.Module:
     if model.architecture == FOURIER_ARCHITECTURE:
         # Legacy V8 files have identical tensors but no minor-version metadata.
         model.model_version = str(saved.get("model_version", "8"))
+    elif model.architecture == V9_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "9"))
+    elif model.architecture == V10_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "10"))
+    elif model.architecture == V101_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "10.1"))
     model.decoding_thresholds = model.learned_thresholds() if hasattr(model, "learned_thresholds") else saved_thresholds(saved)
     model.detection_threshold = model.decoding_thresholds.summary()["frame"]
     model.min_note_seconds = float(saved.get("min_note_seconds", 0.04 if model.architecture != "frame" else 0.08))

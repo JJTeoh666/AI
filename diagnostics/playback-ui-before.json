@@ -1,0 +1,19 @@
+{
+  "notes": 3000,
+  "chords": 300,
+  "cursor_update": {
+    "staff": {
+      "median_ms": 118.635,
+      "p95_ms": 120.964
+    },
+    "timeline": {
+      "median_ms": 124.295,
+      "p95_ms": 141.593
+    },
+    "notes": {
+      "median_ms": 122.527,
+      "p95_ms": 132.476
+    },
+    "staff_page_change_ms": 463.327
+  }
+}

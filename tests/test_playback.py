@@ -125,6 +125,26 @@ class PlaybackTests(unittest.TestCase):
         # Windows refuses deletion if the worker still holds the WAV open.
         self.path.unlink()
 
+    def test_seek_starts_at_the_requested_pcm_frame(self):
+        samples = np.arange(8000, dtype="<i2")
+        with wave.open(str(self.path), "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(16000)
+            audio.writeframes(samples.tobytes())
+        output = ControlledOutput(16000, 1)
+        output.release.set()
+        player = WavPlayer()
+        player.set_volume(100)
+        with patch("piano_ml.playback._WaveOutput", return_value=output):
+            self.assertEqual(player.play(self.path, start_seconds=.25), .5)
+            player._thread.join(2)
+            player.stop()
+        np.testing.assert_array_equal(np.frombuffer(b"".join(output.blocks), dtype="<i2"), samples[4000:])
+        for position in (-1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                player.play(self.path, start_seconds=position)
+
     def test_device_failure_is_reported_and_closes_stream(self):
         output = ControlledOutput(16000, 2)
         output.write = lambda data: (_ for _ in ()).throw(OSError("device failure"))

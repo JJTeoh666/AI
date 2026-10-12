@@ -2,9 +2,11 @@ import csv
 import io
 import json
 import tempfile
+import threading
 import unittest
 import wave
 import zipfile
+import zlib
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +16,7 @@ import torch
 
 from piano_ml.data import MaestroWindows, load_records
 from piano_ml.middle_data import (EXCLUSIONS_NAME, _download_verified, _safe_path,
-                                  refresh_middle_training)
+                                  refresh_middle_training, refresh_high_training)
 from piano_ml.training import pitch_loss_weights, training_loss
 
 
@@ -46,6 +48,8 @@ class MiddleFocusTest(unittest.TestCase):
                        ("old-focus", "train", [30, 30, 30, 68], True),
                        ("new-focus", "train", [30, 68], False),
                        ("new-outside", "train", [70], False),
+                       ("new-high", "train", [68, 108], False),
+                       ("new-g4", "train", [67], False),
                        ("validation", "validation", [50], True),
                        ("test", "test", [80], True))
         self.midi_zip, self.audio_zip = self.root / "index.zip", self.root / "audio.zip"
@@ -68,12 +72,13 @@ class MiddleFocusTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def refresh(self, dry_run=False):
+    def refresh(self, dry_run=False, focus="middle"):
         def remote(*args, **kwargs):
             return zipfile.ZipFile(self.audio_zip)
         with patch("piano_ml.middle_data._midi_archive", return_value=self.midi_zip), \
                 patch("piano_ml.middle_data.remote_zip_class", return_value=remote), redirect_stdout(io.StringIO()):
-            return refresh_middle_training(self.root, self.budget_gb, dry_run=dry_run)
+            refresh = refresh_high_training if focus == "high" else refresh_middle_training
+            return refresh(self.root, self.budget_gb, dry_run=dry_run)
 
     def test_focus_boundaries_rare_pitch_weights_and_ordinary_fallback(self):
         data = MaestroWindows(self.root, "train", seconds=1, windows_per_file=1,
@@ -178,6 +183,106 @@ class MiddleFocusTest(unittest.TestCase):
         self.assertEqual({row["audio_filename"] for row in load_records(self.root, "train")}, original)
         self.assertFalse((self.root / EXCLUSIONS_NAME).exists())
         self.assertFalse((self.root / "new-focus.wav").exists())
+
+    def test_high_replacement_is_strictly_above_g4_and_preserves_previous_exclusions(self):
+        self.budget_gb = (len(self.audio) + len(midi_bytes([30, 30, 30, 68])) + 1) / 1e9
+        manifest = self.root / EXCLUSIONS_NAME
+        manifest.write_text(json.dumps({"excluded_audio_filenames": ["old-low.wav"]}))
+        heldout = {name: (self.root / name).read_bytes() for name in
+                   ("validation.wav", "validation.midi", "test.wav", "test.midi", "maestro-v3.0.0.csv")}
+        plan = self.refresh(dry_run=True, focus="high")
+        self.assertEqual(plan["high_range"], [68, 108])
+        self.assertEqual(plan["minimum_new_high_fraction"], 0.5)
+        self.assertEqual(plan["new_records"][0]["audio_filename"], "new-high.wav")
+        self.assertEqual(plan["new_records"][0]["high_fraction"], 1)
+        self.assertEqual(plan["new_records"][0]["high_count"], 2)
+        self.assertFalse((self.root / "new-high.wav").exists())
+        self.assertEqual(json.loads(manifest.read_text())["excluded_audio_filenames"], ["old-low.wav"])
+        result = self.refresh(focus="high")
+        self.assertEqual(result["status"], "complete")
+        self.assertGreater(result["high_events_after"], result["high_events_before"])
+        excluded = set(json.loads(manifest.read_text())["excluded_audio_filenames"])
+        self.assertEqual(excluded, {"old-low.wav", "old-focus.wav"})
+        self.assertEqual({row["audio_filename"] for row in load_records(self.root, "train")},
+                         {"old-high.wav", "new-high.wav"})
+        self.assertFalse((self.root / "new-g4.wav").exists())
+        self.assertTrue(all((self.root / name).is_file() for name in excluded))
+        for name, data in heldout.items():
+            self.assertEqual((self.root / name).read_bytes(), data)
+
+    def test_high_download_cli_dispatch_and_conflicting_modes(self):
+        from piano_ml.__main__ import main
+        command = ["piano_ml", "download", "--data", str(self.root), "--replace-high-gb", "1", "--dry-run"]
+        with patch("sys.argv", command), patch("piano_ml.__main__.refresh_high_training") as refresh:
+            main()
+        refresh.assert_called_once_with(str(self.root), 1.0, dry_run=True)
+        for other in (["--replace-middle-gb", "1"], ["--additional-gb", "1"],
+                      ["--bass-gb", "1"], ["--validation-total", "20"], ["--train-only"]):
+            with patch("sys.argv", command + other), patch("piano_ml.__main__.refresh_high_training") as refresh:
+                with self.assertRaisesRegex(ValueError, "separately"):
+                    main()
+                refresh.assert_not_called()
+
+    def test_parallel_audio_readers_are_independent(self):
+        self.budget_gb = (2 * (len(self.audio) + len(midi_bytes([68, 108]))) + 1) / 1e9
+        readers, barrier = [], threading.Barrier(2, timeout=10)
+        def concurrent_download(remote, file, stage):
+            if file["kind"] == "audio":
+                readers.append(id(remote))
+                barrier.wait()
+            return _download_verified(remote, file, stage)
+        with patch("piano_ml.middle_data._download_verified", side_effect=concurrent_download):
+            result = self.refresh(focus="high")
+        self.assertEqual(len(result["new_records"]), 2)
+        self.assertEqual(len(set(readers)), 2)
+        self.assertEqual(len(load_records(self.root, "train")), result["active_training_after"])
+
+    def test_parallel_failure_keeps_original_active_set(self):
+        self.budget_gb = (2 * (len(self.audio) + len(midi_bytes([68, 108]))) + 1) / 1e9
+        original = {row["audio_filename"] for row in load_records(self.root, "train")}
+        barrier = threading.Barrier(2, timeout=10)
+        def interrupted_download(remote, file, stage):
+            if file["kind"] == "audio":
+                barrier.wait()
+                if file["path"] == "new-high.wav":
+                    raise OSError("parallel transfer interrupted")
+            return _download_verified(remote, file, stage)
+        with patch("piano_ml.middle_data._download_verified", side_effect=interrupted_download):
+            with self.assertRaisesRegex(OSError, "parallel transfer"):
+                self.refresh(focus="high")
+        self.assertEqual({row["audio_filename"] for row in load_records(self.root, "train")}, original)
+        self.assertFalse((self.root / EXCLUSIONS_NAME).exists())
+        self.assertFalse((self.root / "new-high.wav").exists())
+        self.assertFalse((self.root / "new-outside.wav").exists())
+
+    def test_verified_staged_file_is_reused_but_corruption_is_rejected(self):
+        class NoTransfer:
+            def open(self, name):
+                raise OSError("network must not be used for a verified file")
+        output = self.root / "cached.wav"
+        output.write_bytes(self.audio)
+        file = {"path": "cached.wav", "member": "cached.wav", "bytes": len(self.audio),
+                "crc32": f"{zlib.crc32(self.audio) & 0xffffffff:08x}"}
+        self.assertEqual(_download_verified(NoTransfer(), file, self.root), output)
+        output.write_bytes(bytes([self.audio[0] ^ 1]) + self.audio[1:])
+        with patch("piano_ml.middle_data.time.sleep"), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(OSError, "network must not"):
+                _download_verified(NoTransfer(), file, self.root)
+
+    def test_interrupted_plan_reuses_the_same_stage_when_retried(self):
+        original = {row["audio_filename"] for row in load_records(self.root, "train")}
+        def interrupted_download(remote, file, stage):
+            if file["kind"] == "audio":
+                raise OSError("interrupted transfer")
+            return _download_verified(remote, file, stage)
+        with patch("piano_ml.middle_data._download_verified", side_effect=interrupted_download):
+            with self.assertRaisesRegex(OSError, "interrupted"):
+                self.refresh(focus="high")
+        previous = json.loads((self.root / "high-refresh-plan.json").read_text())
+        self.assertEqual({row["audio_filename"] for row in load_records(self.root, "train")}, original)
+        result = self.refresh(focus="high")
+        self.assertEqual(result["run_id"], previous["run_id"])
+        self.assertEqual(result["status"], "complete")
 
     def test_crc_failures_and_unsafe_paths_are_rejected(self):
         class Corrupt:

@@ -1,9 +1,10 @@
-"""Validation counterpart of V8.1's smooth threshold AvgF objective."""
+"""Validation counterpart of V8.1/V9/V10/V10.1's smooth threshold AvgF objective."""
 
 import math
 import numpy as np
 
 from .thresholds import HEADS
+from .model import FOUR_SCORE_ARCHITECTURES
 
 
 class AvgFLoss:
@@ -55,7 +56,7 @@ class AvgFLoss:
 
 
 def avgf_accumulators(model, grid, temperature=0.1, regularization=0.05):
-    if getattr(model, "architecture", None) != "onsets-fourier-recurrent":
+    if getattr(model, "architecture", None) not in FOUR_SCORE_ARCHITECTURES:
         return {}
     prior = model.threshold_module.prior.detach().cpu().numpy()
     return {values: AvgFLoss(values, prior, temperature, regularization) for values in grid}

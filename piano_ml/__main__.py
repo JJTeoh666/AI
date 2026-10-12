@@ -10,7 +10,7 @@ from .training import train, score
 from .evaluation import evaluate
 from .piano_assets import install_piano
 from .bass_data import download_bass
-from .middle_data import refresh_middle_training
+from .middle_data import refresh_middle_training, refresh_high_training
 
 
 def threshold_list(value: str) -> list[float]:
@@ -39,6 +39,11 @@ def predict(args: argparse.Namespace) -> None:
 
 def download(args):
     replace_middle_gb = getattr(args, "replace_middle_gb", None)
+    replace_high_gb = getattr(args, "replace_high_gb", None)
+    if replace_high_gb is not None:
+        if replace_middle_gb is not None or args.bass_gb is not None or args.additional_gb is not None or args.validation_total is not None or args.train_only:
+            raise ValueError("Use --replace-high-gb separately from other download modes.")
+        return refresh_high_training(args.data, replace_high_gb, dry_run=args.dry_run)
     if replace_middle_gb is not None:
         if args.bass_gb is not None or args.additional_gb is not None or args.validation_total is not None or args.train_only:
             raise ValueError("Use --replace-middle-gb separately from other download modes.")
@@ -74,6 +79,7 @@ def main() -> None:
     dl.add_argument("--train-only", action="store_true", help="With --additional-gb, spend the entire budget on official training pairs")
     dl.add_argument("--bass-gb", type=float, help="Add this many GB of official training pairs ranked by rare bass-note coverage")
     dl.add_argument("--replace-middle-gb", type=float, help="Replace this many GB of active training recordings with new pairs rich in MIDI 30-68; keep old files as inactive backups")
+    dl.add_argument("--replace-high-gb", type=float, help="Replace this many GB of active training recordings with new pairs rich in notes above G4 (MIDI 68-108); retain inactive backups")
     dl.add_argument("--dry-run", action="store_true", help="With budgeted download modes, save a plan without downloading audio files")
     dl.add_argument("--validation-total", type=int, help="Expand only the official validation split to this many local recordings")
     dl.add_argument("--validation-budget-gb", type=float, default=1.0, help="Additional validation download limit; default 1 GB")
@@ -81,18 +87,19 @@ def main() -> None:
     dl.set_defaults(func=download)
     tr = sub.add_parser("train", help="Train a PyTorch piano note model")
     tr.add_argument("--data", default="data/maestro")
-    tr.add_argument("--output", help="Defaults to piano-v8.1.pt for the latest model; older architectures retain their versioned names")
-    tr.add_argument("--architecture", choices=("auto", "frame", "onsets", "onsets-calibrated", "onsets-recurrent", "onsets-recurrent-global", "onsets-multires-global", "onsets-multires-balanced", "onsets-fourier-recurrent"), default="auto",
-                    help="Auto resumes the saved architecture, or creates version 8.1 for a fresh run; V8 resumes continue as V8.1")
+    tr.add_argument("--output", help="Defaults to piano-v10.1.pt for fresh auto training; older architectures retain their versioned names")
+    tr.add_argument("--architecture", choices=("auto", "frame", "onsets", "onsets-calibrated", "onsets-recurrent", "onsets-recurrent-global", "onsets-multires-global", "onsets-multires-balanced", "onsets-fourier-recurrent", "onsets-triple-residual-recurrent", "onsets-cqt-harmonic-recurrent", "onsets-stft-cqt-harmonic-recurrent"), default="auto",
+                    help="Auto resumes the saved architecture, or creates V10.1 for a fresh run; V8 resumes continue as V8.1")
     tr.add_argument("--init-from", help="Transfer the compatible recognizer (or CNN features); optimizer and epoch start fresh")
-    tr.add_argument("--hidden-size", type=int, help="Fresh GRU width: source width with --init-from; v8 default 192, older models 128")
+    tr.add_argument("--hidden-size", type=int, help="Fresh GRU width: source width with --init-from; V10/V10.1 default 128, V8.1/V9 192, older models 128")
     tr.add_argument("--gru-layers", type=int, help="Fresh GRU layers: source layers with --init-from, otherwise 2")
     tr.add_argument("--conv-steps", type=int, help="Shared convolution refinement steps; default 3 for recurrent architectures")
-    tr.add_argument("--feature-width", type=int, help="V8 fused/Fourier channel width, default 384")
-    tr.add_argument("--fourier-modes", type=int, help="V8 retained temporal Fourier modes including DC, default 9")
-    tr.add_argument("--fourier-layers", type=int, help="V8 trainable Fourier mixing blocks, default 2")
-    tr.add_argument("--long-fft", type=int, help="Version 6–8 long FFT size, default 8192")
-    tr.add_argument("--release-frames", type=int, help="Version 6–8 consecutive inactive frames needed to end a note, default 3")
+    tr.add_argument("--feature-width", type=int, help="Branch and fused width: V10/V10.1 default 200, V8.1/V9 384; V9/V10/V10.1 require at least 16 and a multiple of eight")
+    tr.add_argument("--fourier-modes", type=int, help="V8.1 retained temporal Fourier modes including DC, default 9; specific to onsets-fourier-recurrent")
+    tr.add_argument("--fourier-layers", type=int, help="V8.1 trainable Fourier mixing blocks, default 2; specific to onsets-fourier-recurrent")
+    tr.add_argument("--long-fft", type=int, help="Version 6–10 long FFT size, default 8192")
+    tr.add_argument("--short-fft", type=int, help="V10.1 short STFT size, default 2048; other versions keep their own spectral settings")
+    tr.add_argument("--release-frames", type=int, help="Version 6–10.1 consecutive inactive frames needed to end a note, default 3")
     tr.add_argument("--bass-sampling", type=float, help="Optional fraction of windows anchored on bass notes; default 0 for all versions")
     tr.add_argument("--bass-max-note", type=int, help="Highest MIDI pitch for bass sampling, default 47 (B2)")
     tr.add_argument("--treble-sampling", type=float, help="Optional fraction anchored on treble notes; default 0; bass + middle + treble must be <= 1")
@@ -102,10 +109,10 @@ def main() -> None:
     tr.add_argument("--treble-min-note", type=int, help="Lowest MIDI pitch for treble sampling, default 84 (C6)")
     tr.add_argument("--edge-loss-weight", type=float, help="Optional error multiplier on bass/treble keys; default 1 for equal pitch weighting")
     tr.add_argument("--middle-loss-weight", type=float, help="Optional error multiplier on middle keys; default 1 for equal pitch weighting")
-    tr.add_argument("--offset-loss-weight", type=float, help="Offset loss scale: v6–v8 default 1; older models 0.5")
-    tr.add_argument("--release-loss-weight", type=float, help="Additional frame loss around releases: v6–v8 default 0.25; older models 0")
+    tr.add_argument("--offset-loss-weight", type=float, help="Offset loss scale: v6–v10 default 1; older models 0.5")
+    tr.add_argument("--release-loss-weight", type=float, help="Additional frame loss around releases: v6–v10 default 0.25; older models 0")
     tr.add_argument("--threshold-calibration", choices=("training", "validation"),
-                    help="V7/V8 use gradient training calibration; v6 defaults to decoded validation calibration; older models use smooth training calibration")
+                    help="V7/V8/V9/V10/V10.1 use gradient training calibration; v6 defaults to decoded validation calibration; older models use smooth training calibration")
     tr.add_argument("--calibration-values", type=threshold_list,
                     help="Global validation candidates for each head, default 0.35,0.5,0.65,0.8; also includes current parameters")
     tr.add_argument("--calibration-every", type=int,
@@ -122,8 +129,8 @@ def main() -> None:
     threshold_learning.add_argument("--learn-thresholds", dest="freeze_thresholds", action="store_false",
                                    help="Learn threshold parameters alongside the recognizer")
     tr.set_defaults(freeze_thresholds=None)
-    tr.add_argument("--threshold-lr", type=float, help="Threshold parameter LR; fresh v7/v8 default 0.003, older models 0.01")
-    tr.add_argument("--threshold-loss-weight", type=float, help="Smooth threshold loss multiplier (v8 pitch F0–F3, v7 F0/F3, older models F1); default 1")
+    tr.add_argument("--threshold-lr", type=float, help="Threshold parameter LR; fresh v7/v8/v9/v10 default 0.003, older models 0.01")
+    tr.add_argument("--threshold-loss-weight", type=float, help="Smooth threshold loss multiplier (V8.1/V9/V10/V10.1 pitch F0–F3, v7 F0/F3, older models F1); default 1")
     tr.add_argument("--threshold-temperature", type=float, help="Smooth decision temperature; default 0.1")
     tr.add_argument("--threshold-regularization", type=float, help="Pull thresholds toward initial values; default 0.05")
     tr.add_argument("--rnn-backend", choices=("auto", "native", "cudnn"), default="auto",
@@ -142,7 +149,7 @@ def main() -> None:
     tr.add_argument("--patience", type=int, default=0, help="Legacy compatibility option; ignored. Training runs all requested epochs")
     tr.add_argument("--lr-patience", type=int, default=3)
     tr.add_argument("--selection-metric", choices=("auto", "avgf_loss", "f1", "onset_f1", "note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123"), default="auto",
-                    help="Auto selects minimum validation AvgF loss for V8.1, macro F0/F3 for V7, mean note F0..F4 for older onset models, or frame F1")
+                    help="Auto selects minimum validation AvgF loss for V10.1/V10/V9/V8.1, macro F0/F3 for V7, mean note F0..F4 for older onset models, or frame F1")
     tr.add_argument("--thresholds", type=threshold_list, help="Legacy shared frame/onset sweep")
     for head in ("frame", "onset", "offset"):
         tr.add_argument(f"--{head}-thresholds", type=threshold_list,
@@ -173,7 +180,7 @@ def main() -> None:
         ev.add_argument(f"--{head}-thresholds", type=threshold_list,
                         help=f"Sweep independent {head} values; validation only")
     ev.add_argument("--selection-metric", choices=("auto", "avgf_loss", "f1", "onset_f1", "note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123"), default="auto",
-                    help="Auto selects minimum validation AvgF loss for V8.1, macro F0123 for legacy V8, macro F0/F3 for V7, or older models' note/frame scores")
+                    help="Auto selects minimum validation AvgF loss for V10.1/V10/V9/V8.1, macro F0123 for legacy V8, macro F0/F3 for V7, or older models' note/frame scores")
     ev.add_argument("--min-note-seconds", type=float)
     ev.add_argument("--full-recordings", action="store_true", help="Evaluate complete recordings without clip boundaries")
     ev.add_argument("--calibrate-output", help="Save a checkpoint with the chosen validation threshold")

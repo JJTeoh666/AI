@@ -162,14 +162,14 @@ class V8PipelineTest(unittest.TestCase):
         self.temporary.cleanup()
 
     def options(self, output, **changes):
-        values = dict(data=str(self.root), output=str(output), architecture="auto", epochs=1,
+        values = dict(data=str(self.root), output=str(output), architecture="onsets-fourier-recurrent", epochs=1,
                       batch_size=2, seconds=1.0, windows_per_file=1, max_files=None,
                       positive_weight=None, lr=1e-3, seed=42, workers=0, device="cpu",
                       resume=None, init_from=None, reset_optimizer=False, augment=False,
                       hidden_size=16, gru_layers=1, feature_width=32, fourier_modes=3, fourier_layers=1)
         return Namespace(**{**values, **changes})
 
-    def test_auto_training_resume_checkpoint_roundtrip_and_app_inference(self):
+    def test_explicit_training_resume_checkpoint_roundtrip_and_app_inference(self):
         checkpoint = self.root / "v8.pt"
         with redirect_stdout(io.StringIO()):
             train(self.options(checkpoint))
@@ -220,7 +220,7 @@ class V8PipelineTest(unittest.TestCase):
         torch.save(saved, latest)
         self.assertEqual(load_model(latest, torch.device("cpu")).model_version, "8")
         with redirect_stdout(io.StringIO()):
-            train(self.options(checkpoint, resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
+            train(self.options(checkpoint, architecture="auto", resume=str(latest), lr=None, hidden_size=None, gru_layers=None,
                                feature_width=None, fourier_modes=None, fourier_layers=None))
         resumed = torch.load(latest, weights_only=True)
         self.assertEqual(resumed["epoch"], 2)
@@ -244,7 +244,7 @@ class V8PipelineTest(unittest.TestCase):
         self.assertEqual(len(result["thresholds"]), 3)
         self.assertNotIn("register_thresholds", result)
 
-    def test_auto_output_uses_v81_names_and_reports_version(self):
+    def test_explicit_v81_output_uses_v81_names_and_reports_version(self):
         previous_directory = Path.cwd()
         console = io.StringIO()
         args = self.options(None)

@@ -7,6 +7,7 @@ from torch import nn
 import torchaudio
 from .learned_thresholds import (GlobalThresholds, PitchBalancedThresholds,
                                  PitchFourScoreThresholds, RegisterThresholds)
+from .cqt import ConstantQ, HarmonicStack, HARMONICS, PIANO_BINS
 
 SAMPLE_RATE = 16000
 HOP_LENGTH = 320
@@ -16,14 +17,23 @@ N_NOTES = HIGH_NOTE - LOW_NOTE + 1
 V7_ARCHITECTURE = "onsets-multires-balanced"
 FOURIER_ARCHITECTURE = "onsets-fourier-recurrent"
 FOURIER_MODEL_VERSION = "8.1"
-DEFAULT_ARCHITECTURE = FOURIER_ARCHITECTURE
-BALANCED_ARCHITECTURES = (V7_ARCHITECTURE, FOURIER_ARCHITECTURE)
+V9_ARCHITECTURE = "onsets-triple-residual-recurrent"
+V9_MODEL_VERSION = "9"
+V10_ARCHITECTURE = "onsets-cqt-harmonic-recurrent"
+V10_MODEL_VERSION = "10"
+V101_ARCHITECTURE = "onsets-stft-cqt-harmonic-recurrent"
+V101_MODEL_VERSION = "10.1"
+DEFAULT_ARCHITECTURE = V101_ARCHITECTURE
+FOUR_SCORE_ARCHITECTURES = (FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE)
+BALANCED_ARCHITECTURES = (V7_ARCHITECTURE, *FOUR_SCORE_ARCHITECTURES)
 RECURRENT_CONV_ARCHITECTURES = ("onsets-recurrent", "onsets-recurrent-global",
                                "onsets-multires-global", V7_ARCHITECTURE)
 MULTIRES_ARCHITECTURES = ("onsets-multires-global", *BALANCED_ARCHITECTURES)
 
 
 def default_selection_metric(architecture, model_version=None):
+    if architecture in (V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE):
+        return "avgf_loss"
     if architecture == FOURIER_ARCHITECTURE:
         return "note_macro_f0123" if model_version == "8" else "avgf_loss"
     if architecture == V7_ARCHITECTURE:
@@ -34,7 +44,8 @@ def default_selection_metric(architecture, model_version=None):
 def checkpoint_format_version(architecture):
     return {"frame": 4, "onsets": 4, "onsets-calibrated": 5, "onsets-recurrent": 5,
             "onsets-recurrent-global": 6, "onsets-multires-global": 7,
-            V7_ARCHITECTURE: 8, FOURIER_ARCHITECTURE: 9}[architecture]
+            V7_ARCHITECTURE: 8, FOURIER_ARCHITECTURE: 9, V9_ARCHITECTURE: 10,
+            V10_ARCHITECTURE: 11, V101_ARCHITECTURE: 12}[architecture]
 
 
 class PianoNet(nn.Module):
@@ -429,6 +440,253 @@ class FourierRecurrentPianoNet(nn.Module):
         return self.threshold_module.export()
 
 
+class RawFANEncoder(nn.Module):
+    """Centered raw Hann windows, learned FAN features and local temporal CNN."""
+
+    def __init__(self, width, dropout=0.2):
+        super().__init__()
+        self.window_size = 2048
+        self.register_buffer("window", torch.hann_window(self.window_size))
+        self.fan = FourierAnalysisLayer(self.window_size, width)
+        self.norm = nn.LayerNorm(width)
+        self.convolution = nn.Sequential(nn.Conv1d(width, width, 3, padding=1),
+                                         nn.GroupNorm(8, width), nn.GELU(), nn.Dropout(dropout))
+
+    def raw_frames(self, wave):
+        # Centers are 0, 320, ...; constant padding matches both centered STFTs.
+        padded = nn.functional.pad(wave, (self.window_size // 2, self.window_size // 2))
+        return padded.unfold(-1, self.window_size, HOP_LENGTH) * self.window
+
+    def forward(self, wave):
+        features = self.norm(self.fan(self.raw_frames(wave)))
+        return self.convolution(features.transpose(1, 2)).transpose(1, 2)
+
+
+class ResidualTemporalCNN(nn.Module):
+    """Two temporal convolutions with a direct, unscaled residual connection."""
+
+    def __init__(self, width, dropout=0.2):
+        super().__init__()
+        self.convolution = nn.Sequential(
+            nn.Conv1d(width, 2 * width, 3, padding=1), nn.GroupNorm(8, 2 * width),
+            nn.GELU(), nn.Dropout(dropout),
+            nn.Conv1d(2 * width, width, 3, padding=1), nn.GroupNorm(8, width), nn.Dropout(dropout))
+
+    def forward(self, sequence):
+        residual = self.convolution(sequence.transpose(1, 2)).transpose(1, 2)
+        return nn.functional.gelu(sequence + residual)
+
+
+class ThreeBranchPianoNet(nn.Module):
+    """V9: short/long FFT CNNs and raw FAN CNN, residual CNNs, then BiGRU."""
+
+    architecture = V9_ARCHITECTURE
+    model_version = V9_MODEL_VERSION
+
+    def __init__(self, feature_width=384, hidden_size=192, gru_layers=2, dropout=0.2,
+                 rnn_backend="auto", long_fft=8192, release_frames=3):
+        super().__init__()
+        if not isinstance(feature_width, int) or feature_width < 16 or feature_width % 8:
+            raise ValueError("V9 feature width must be an integer at least 16 and divisible by eight.")
+        if any(not isinstance(value, int) or value < 1 for value in (hidden_size, gru_layers)):
+            raise ValueError("GRU dimensions and layer counts must be positive integers.")
+        if not isinstance(long_fft, int) or long_fft < 2048 or long_fft & (long_fft - 1):
+            raise ValueError("Long FFT must be a power of two, at least 2048.")
+        if not isinstance(release_frames, int) or release_frames < 2:
+            raise ValueError("Release persistence must be at least two frames.")
+        if not 0 <= dropout < 1 or rnn_backend not in ("auto", "native", "cudnn"):
+            raise ValueError("Dropout must be inside [0,1); RNN backend must be auto, native or cudnn.")
+        self.config = dict(architecture=self.architecture, feature_width=feature_width,
+                           hidden_size=hidden_size, gru_layers=gru_layers, dropout=dropout,
+                           rnn_backend=rnn_backend, long_fft=long_fft, release_frames=release_frames)
+        self.short_mel = torchaudio.transforms.MelSpectrogram(
+            sample_rate=SAMPLE_RATE, n_fft=2048, win_length=2048, hop_length=HOP_LENGTH,
+            n_mels=128, f_min=20.0, f_max=8000.0, center=True, pad_mode="constant")
+        self.long_mel = torchaudio.transforms.MelSpectrogram(
+            sample_rate=SAMPLE_RATE, n_fft=long_fft, win_length=long_fft, hop_length=HOP_LENGTH,
+            n_mels=256, f_min=20.0, f_max=8000.0, center=True, pad_mode="constant")
+        self.short_encoder = FourierSpectralEncoder(128, feature_width, dropout)
+        self.long_encoder = FourierSpectralEncoder(256, feature_width, dropout)
+        self.raw_encoder = RawFANEncoder(feature_width, dropout)
+        self.fusion = nn.Sequential(nn.Linear(3 * feature_width, feature_width),
+                                    nn.LayerNorm(feature_width), nn.GELU(), nn.Dropout(dropout))
+        self.residual = nn.Sequential(*[ResidualTemporalCNN(feature_width, dropout) for _ in range(3)])
+        windows_nightly = sys.platform == "win32" and ".dev" in torch.__version__
+        use_cudnn = rnn_backend == "cudnn" or (rnn_backend == "auto" and not windows_nightly)
+        self.temporal = PortableGRU(feature_width, hidden_size, num_layers=gru_layers,
+                                   batch_first=True, bidirectional=True, use_cudnn=use_cudnn,
+                                   dropout=dropout if gru_layers > 1 else 0)
+        width = 2 * hidden_size
+        self.sequence_norm = nn.LayerNorm(width)
+        self.onset_head = nn.Linear(width, N_NOTES)
+        self.frame_head = nn.Linear(width + N_NOTES, N_NOTES)
+        self.offset_head = nn.Linear(width, N_NOTES)
+        self.velocity_head = nn.Linear(width, N_NOTES)
+        self.pedal_head = nn.Linear(width, 1)
+        self.offset_refinement = nn.Sequential(nn.Linear(width + 2 * N_NOTES + 1, hidden_size),
+                                               nn.GELU(), nn.Linear(hidden_size, N_NOTES))
+        self.threshold_module = PitchFourScoreThresholds()
+
+    def forward(self, wave):
+        short = self.short_encoder(torch.log1p(self.short_mel(wave).clamp_min(0)))
+        long = self.long_encoder(torch.log1p(self.long_mel(wave).clamp_min(0)))
+        raw = self.raw_encoder(wave)
+        features = self.residual(self.fusion(torch.cat((short, long, raw), dim=-1)))
+        sequence, _ = self.temporal(features)
+        sequence = self.sequence_norm(sequence)
+        onset = self.onset_head(sequence)
+        frame = self.frame_head(torch.cat((sequence, onset.sigmoid()), dim=-1))
+        pedal = self.pedal_head(sequence)
+        context = torch.cat((sequence, frame.sigmoid(), onset.sigmoid(), pedal.sigmoid()), dim=-1)
+        offset = self.offset_head(sequence) + self.offset_refinement(context)
+        return {"frame": frame, "onset": onset, "offset": offset,
+                "velocity": self.velocity_head(sequence), "pedal": pedal}
+
+    def learned_thresholds(self):
+        return self.threshold_module.export()
+
+
+class CompactSpectralEncoder(nn.Module):
+    """V10 frequency-preserving CNN; ceil pooling retains the highest keys."""
+
+    def __init__(self, bands, input_channels, width, dropout, frequency_pool=(2, 2, 2, 2)):
+        super().__init__()
+        layers = []
+        channels = input_channels
+        for output, pool in zip((16, 32, 64, 96), frequency_pool):
+            layers.extend((nn.Conv2d(channels, output, 3, padding=1),
+                           nn.GroupNorm(8, output), nn.GELU(),
+                           nn.MaxPool2d((pool, 1), ceil_mode=True)))
+            channels = output
+            bands = (bands + pool - 1) // pool
+        self.convolution = nn.Sequential(*layers)
+        self.projection = nn.Sequential(nn.Linear(channels * bands, width),
+                                        nn.LayerNorm(width), nn.GELU(), nn.Dropout(dropout))
+
+    def forward(self, spectrum):
+        features = self.convolution(spectrum)
+        return self.projection(features.permute(0, 3, 1, 2).flatten(2))
+
+
+class HarmonicCQTPianoNet(nn.Module):
+    """V10: harmonic CQT and long FFT CNNs, residual CNNs, then BiGRU."""
+
+    architecture = V10_ARCHITECTURE
+    model_version = V10_MODEL_VERSION
+
+    def __init__(self, feature_width=200, hidden_size=128, gru_layers=2, dropout=0.2,
+                 rnn_backend="auto", long_fft=8192, release_frames=3):
+        super().__init__()
+        if not isinstance(feature_width, int) or feature_width < 16 or feature_width % 8:
+            raise ValueError("V10 feature width must be an integer at least 16 and divisible by eight.")
+        if any(not isinstance(value, int) or value < 1 for value in (hidden_size, gru_layers)):
+            raise ValueError("GRU dimensions and layer counts must be positive integers.")
+        if not isinstance(long_fft, int) or long_fft < 2048 or long_fft & (long_fft - 1):
+            raise ValueError("Long FFT must be a power of two, at least 2048.")
+        if not isinstance(release_frames, int) or release_frames < 2:
+            raise ValueError("Release persistence must be at least two frames.")
+        if not 0 <= dropout < 1 or rnn_backend not in ("auto", "native", "cudnn"):
+            raise ValueError("Dropout must be inside [0,1); RNN backend must be auto, native or cudnn.")
+        self.config = dict(architecture=self.architecture, feature_width=feature_width,
+                           hidden_size=hidden_size, gru_layers=gru_layers, dropout=dropout,
+                           rnn_backend=rnn_backend, long_fft=long_fft, release_frames=release_frames)
+        self.cqt = ConstantQ()
+        self.harmonic_stack = HarmonicStack(len(self.cqt.frequencies))
+        self.cqt_encoder = CompactSpectralEncoder(PIANO_BINS, len(HARMONICS), feature_width, dropout)
+        self.long_mel = torchaudio.transforms.MelSpectrogram(
+            sample_rate=SAMPLE_RATE, n_fft=long_fft, win_length=long_fft, hop_length=HOP_LENGTH,
+            n_mels=256, f_min=20.0, f_max=8000.0, center=True, pad_mode="constant")
+        self.long_encoder = CompactSpectralEncoder(256, 1, feature_width, dropout)
+        self._init_sequence(feature_width, hidden_size, gru_layers, dropout, rnn_backend)
+
+    def _init_sequence(self, feature_width, hidden_size, gru_layers, dropout, rnn_backend):
+        self.fusion = nn.Sequential(nn.Linear(2 * feature_width, feature_width),
+                                    nn.LayerNorm(feature_width), nn.GELU(), nn.Dropout(dropout))
+        self.residual = nn.Sequential(*[ResidualTemporalCNN(feature_width, dropout) for _ in range(3)])
+        windows_nightly = sys.platform == "win32" and ".dev" in torch.__version__
+        use_cudnn = rnn_backend == "cudnn" or (rnn_backend == "auto" and not windows_nightly)
+        self.temporal = PortableGRU(feature_width, hidden_size, num_layers=gru_layers,
+                                   batch_first=True, bidirectional=True, use_cudnn=use_cudnn,
+                                   dropout=dropout if gru_layers > 1 else 0)
+        width = 2 * hidden_size
+        self.sequence_norm = nn.LayerNorm(width)
+        self.onset_head = nn.Linear(width, N_NOTES)
+        self.frame_head = nn.Linear(width + N_NOTES, N_NOTES)
+        self.offset_head = nn.Linear(width, N_NOTES)
+        self.velocity_head = nn.Linear(width, N_NOTES)
+        self.pedal_head = nn.Linear(width, 1)
+        self.offset_refinement = nn.Sequential(nn.Linear(width + 2 * N_NOTES + 1, hidden_size),
+                                               nn.GELU(), nn.Linear(hidden_size, N_NOTES))
+        self.threshold_module = PitchFourScoreThresholds()
+
+    def forward(self, wave):
+        cqt = self.cqt_encoder(torch.log1p(10 * self.harmonic_stack(self.cqt(wave))))
+        long = self.long_encoder(torch.log1p(self.long_mel(wave).clamp_min(0))[:, None])
+        features = self.residual(self.fusion(torch.cat((cqt, long), dim=-1)))
+        return self._predict_outputs(features)
+
+    def _predict_outputs(self, features):
+        sequence, _ = self.temporal(features)
+        sequence = self.sequence_norm(sequence)
+        onset = self.onset_head(sequence)
+        frame = self.frame_head(torch.cat((sequence, onset.sigmoid()), dim=-1))
+        pedal = self.pedal_head(sequence)
+        context = torch.cat((sequence, frame.sigmoid(), onset.sigmoid(), pedal.sigmoid()), dim=-1)
+        offset = self.offset_head(sequence) + self.offset_refinement(context)
+        return {"frame": frame, "onset": onset, "offset": offset,
+                "velocity": self.velocity_head(sequence), "pedal": pedal}
+
+    def learned_thresholds(self):
+        return self.threshold_module.export()
+
+
+class STFTCQTPianoNet(HarmonicCQTPianoNet):
+    """V10.1: short STFT CNN plus harmonic CQT CNN, residual CNNs and BiGRU."""
+
+    architecture = V101_ARCHITECTURE
+    model_version = V101_MODEL_VERSION
+
+    def __init__(self, feature_width=200, hidden_size=128, gru_layers=2, dropout=0.2,
+                 rnn_backend="auto", short_fft=2048, release_frames=3):
+        nn.Module.__init__(self)
+        if not isinstance(feature_width, int) or feature_width < 16 or feature_width % 8:
+            raise ValueError("V10.1 feature width must be an integer at least 16 and divisible by eight.")
+        if any(not isinstance(value, int) or value < 1 for value in (hidden_size, gru_layers)):
+            raise ValueError("GRU dimensions and layer counts must be positive integers.")
+        if not isinstance(short_fft, int) or short_fft < 512 or short_fft & (short_fft - 1):
+            raise ValueError("Short STFT size must be a power of two, at least 512.")
+        if not isinstance(release_frames, int) or release_frames < 2:
+            raise ValueError("Release persistence must be at least two frames.")
+        if not 0 <= dropout < 1 or rnn_backend not in ("auto", "native", "cudnn"):
+            raise ValueError("Dropout must be inside [0,1); RNN backend must be auto, native or cudnn.")
+        self.config = dict(architecture=self.architecture, feature_width=feature_width,
+                           hidden_size=hidden_size, gru_layers=gru_layers, dropout=dropout,
+                           rnn_backend=rnn_backend, short_fft=short_fft, release_frames=release_frames)
+        self.short_stft = torchaudio.transforms.Spectrogram(
+            n_fft=short_fft, win_length=short_fft, hop_length=HOP_LENGTH, power=1.0,
+            center=True, pad_mode="constant")
+        # The raw, linearly spaced spectrum has 1025 bins at default settings.
+        # Extra pooling at the final stage retains 17 frequency positions.
+        self.short_encoder = CompactSpectralEncoder(short_fft // 2 + 1, 1, feature_width,
+                                                     dropout, frequency_pool=(2, 2, 2, 8))
+        self.cqt = ConstantQ()
+        self.harmonic_stack = HarmonicStack(len(self.cqt.frequencies))
+        self.cqt_encoder = CompactSpectralEncoder(PIANO_BINS, len(HARMONICS), feature_width, dropout)
+        self._init_sequence(feature_width, hidden_size, gru_layers, dropout, rnn_backend)
+
+    def short_spectrum(self, wave):
+        # Fixed Hann-window sum scaling matches CQT's amplitude convention.
+        # It does not normalize individual audio windows or their loudness.
+        with torch.autocast(device_type=wave.device.type, enabled=False):
+            return self.short_stft(wave.float()) / (self.config["short_fft"] / 2)
+
+    def forward(self, wave):
+        short = self.short_encoder(torch.log1p(10 * self.short_spectrum(wave))[:, None])
+        cqt = self.cqt_encoder(torch.log1p(10 * self.harmonic_stack(self.cqt(wave))))
+        features = self.residual(self.fusion(torch.cat((short, cqt), dim=-1)))
+        return self._predict_outputs(features)
+
+
 def build_model(config: dict | None = None) -> nn.Module:
     config = dict(config or {"architecture": "frame"})
     architecture = config.pop("architecture", "frame")
@@ -448,4 +706,10 @@ def build_model(config: dict | None = None) -> nn.Module:
         return BalancedPianoNet(**config)
     if architecture == FOURIER_ARCHITECTURE:
         return FourierRecurrentPianoNet(**config)
+    if architecture == V9_ARCHITECTURE:
+        return ThreeBranchPianoNet(**config)
+    if architecture == V10_ARCHITECTURE:
+        return HarmonicCQTPianoNet(**config)
+    if architecture == V101_ARCHITECTURE:
+        return STFTCQTPianoNet(**config)
     raise ValueError(f"Unsupported model architecture: {architecture}")

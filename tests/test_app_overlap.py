@@ -68,6 +68,19 @@ class AppOverlapTest(unittest.TestCase):
             self.assertEqual(self.app.model.get(), "piano-v8.pt")
             self.assertTrue(self.app.threshold_details.get().startswith("V8 —"))
 
+    def test_v9_is_preferred_over_v81_and_displays_version(self):
+        checkpoints = self.directory / "checkpoints"
+        checkpoints.mkdir()
+        for name in ("piano-v8.1.pt", "piano-v9.pt"):
+            (checkpoints / name).touch()
+        self.app.model.set("")
+        self.app.model_paths.clear()
+        with patch("piano_ml.app.PROJECT", self.directory), patch("piano_ml.app.load_model") as load:
+            load.return_value = SimpleNamespace(model_version="9", decoding_thresholds=Thresholds())
+            self.app.refresh_models()
+        self.assertEqual(self.app.model.get(), "piano-v9.pt")
+        self.assertTrue(self.app.threshold_details.get().startswith("V9"))
+
     def test_selection_reaches_the_inference_worker(self):
         for label, blend in (("Weighted average", "weighted"), ("50/50 average", "equal"), ("Keep center", "crop")):
             with self.subTest(blend=blend):
@@ -85,6 +98,32 @@ class AppOverlapTest(unittest.TestCase):
                 self.assertEqual(transcribe.call_args.kwargs["overlap_blend"], blend)
                 self.assertEqual(self.app.messages.get_nowait()[0], "result")
                 self.app.set_busy(False)
+
+    def test_v10_is_preferred_and_displays_version(self):
+        checkpoints = self.directory / "checkpoints"
+        checkpoints.mkdir()
+        for name in ("piano-v8.1.pt", "piano-v9.pt", "piano-v10.pt"):
+            (checkpoints / name).touch()
+        self.app.model.set("")
+        self.app.model_paths.clear()
+        with patch("piano_ml.app.PROJECT", self.directory), patch("piano_ml.app.load_model") as load:
+            load.return_value = SimpleNamespace(model_version="10", decoding_thresholds=Thresholds())
+            self.app.refresh_models()
+        self.assertEqual(self.app.model.get(), "piano-v10.pt")
+        self.assertTrue(self.app.threshold_details.get().startswith("V10"))
+
+    def test_v101_is_preferred_and_displays_version(self):
+        checkpoints = self.directory / "checkpoints"
+        checkpoints.mkdir()
+        for name in ("piano-v10.pt", "piano-v10.1.pt", "piano-v9.pt"):
+            (checkpoints / name).touch()
+        self.app.model.set("")
+        self.app.model_paths.clear()
+        with patch("piano_ml.app.PROJECT", self.directory), patch("piano_ml.app.load_model") as load:
+            load.return_value = SimpleNamespace(model_version="10.1", decoding_thresholds=Thresholds())
+            self.app.refresh_models()
+        self.assertEqual(self.app.model.get(), "piano-v10.1.pt")
+        self.assertTrue(self.app.threshold_details.get().startswith("V10.1"))
 
     def test_saved_and_legacy_results_restore_the_correct_method(self):
         path = self.directory / "prediction.json"

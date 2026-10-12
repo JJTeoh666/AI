@@ -15,7 +15,7 @@ from .inference import get_device, load_model, predict_probabilities
 from .thresholds import requested_grid, Thresholds
 from .midi import read_notes
 from .model import (HOP_LENGTH, SAMPLE_RATE, LOW_NOTE, N_NOTES, model_config,
-                    default_selection_metric, checkpoint_format_version)
+                    default_selection_metric, checkpoint_format_version, FOUR_SCORE_ARCHITECTURES)
 from .training import save_checkpoint, score
 from .avgf import avgf_accumulators, event_targets
 
@@ -33,8 +33,8 @@ def evaluate(args):
     config = saved.get("training_config", {})
     avgf_options = {"temperature": config.get("threshold_temperature", 0.1),
                     "regularization": config.get("threshold_regularization", 0.05)}
-    if metric == "avgf_loss" and model.architecture != "onsets-fourier-recurrent":
-        raise ValueError("AvgF loss selection requires a V8/V8.1 Fourier model.")
+    if metric == "avgf_loss" and model.architecture not in FOUR_SCORE_ARCHITECTURES:
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
     minimum = args.min_note_seconds if args.min_note_seconds is not None else model.min_note_seconds
     if args.full_recordings:
         root = Path(args.data)

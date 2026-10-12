@@ -1,0 +1,18 @@
+{
+  "verified_on": "2026-10-12",
+  "model_version": "10.1",
+  "architecture": "onsets-stft-cqt-harmonic-recurrent",
+  "checkpoint_format_version": 12,
+  "trainable_parameters": 3054988,
+  "branches": [
+    "short STFT -> CNN",
+    "CQT -> harmonic stack -> CNN"
+  ],
+  "four_second_frames": 201,
+  "targeted_checks_passed": 78,
+  "cuda_default_batch": 4,
+  "preserved_readme_commands": 28,
+  "training_command_rows": 23,
+  "long_training_run": false,
+  "recognition_quality_comparison": false
+}

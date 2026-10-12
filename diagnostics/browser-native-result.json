@@ -1,0 +1,215 @@
+{
+  "audio": "browser-clip.wav",
+  "model": "piano-v8.1.onnx",
+  "model_version": "8.1",
+  "architecture": "onsets-fourier-recurrent",
+  "duration": 8,
+  "threshold": 0.6817780137062073,
+  "thresholds": {
+    "frame": 0.6817780137062073,
+    "onset": 0.7117568850517273,
+    "offset": 0.6754965782165527
+  },
+  "min_note_seconds": 0.04,
+  "inference_config": {
+    "chunk_seconds": 4,
+    "context_seconds": 1,
+    "overlap_seconds": 2,
+    "overlap_blend": "weighted"
+  },
+  "notes": [
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 0.44,
+      "end": 1.06,
+      "confidence": 0.954,
+      "velocity": 53
+    },
+    {
+      "pitch": 67,
+      "name": "G4",
+      "start": 1.54,
+      "end": 1.9,
+      "confidence": 0.899,
+      "velocity": 42
+    },
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 1.56,
+      "end": 3.52,
+      "confidence": 0.909,
+      "velocity": 29
+    },
+    {
+      "pitch": 58,
+      "name": "A#3",
+      "start": 1.56,
+      "end": 3.56,
+      "confidence": 0.956,
+      "velocity": 34
+    },
+    {
+      "pitch": 62,
+      "name": "D4",
+      "start": 4.24,
+      "end": 4.36,
+      "confidence": 0.97,
+      "velocity": 64
+    },
+    {
+      "pitch": 62,
+      "name": "D4",
+      "start": 4.68,
+      "end": 5.74,
+      "confidence": 0.979,
+      "velocity": 69
+    },
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 5.54,
+      "end": 6.34,
+      "confidence": 0.994,
+      "velocity": 36
+    },
+    {
+      "pitch": 65,
+      "name": "F4",
+      "start": 5.54,
+      "end": 5.9,
+      "confidence": 0.86,
+      "velocity": 50
+    },
+    {
+      "pitch": 67,
+      "name": "G4",
+      "start": 5.54,
+      "end": 6,
+      "confidence": 0.894,
+      "velocity": 56
+    },
+    {
+      "pitch": 59,
+      "name": "B3",
+      "start": 5.56,
+      "end": 6.42,
+      "confidence": 0.878,
+      "velocity": 39
+    },
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 6.34,
+      "end": 6.7,
+      "confidence": 0.922,
+      "velocity": 37
+    },
+    {
+      "pitch": 62,
+      "name": "D4",
+      "start": 6.36,
+      "end": 6.42,
+      "confidence": 0.831,
+      "velocity": 43
+    },
+    {
+      "pitch": 63,
+      "name": "D#4",
+      "start": 6.36,
+      "end": 6.68,
+      "confidence": 0.972,
+      "velocity": 65
+    },
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 6.7,
+      "end": 6.86,
+      "confidence": 0.937,
+      "velocity": 38
+    },
+    {
+      "pitch": 65,
+      "name": "F4",
+      "start": 6.7,
+      "end": 7.14,
+      "confidence": 0.966,
+      "velocity": 64
+    },
+    {
+      "pitch": 63,
+      "name": "D#4",
+      "start": 7.08,
+      "end": 8,
+      "confidence": 0.936,
+      "velocity": 62
+    },
+    {
+      "pitch": 48,
+      "name": "C3",
+      "start": 7.14,
+      "end": 7.48,
+      "confidence": 0.94,
+      "velocity": 42
+    },
+    {
+      "pitch": 55,
+      "name": "G3",
+      "start": 7.14,
+      "end": 7.68,
+      "confidence": 0.933,
+      "velocity": 38
+    },
+    {
+      "pitch": 62,
+      "name": "D4",
+      "start": 7.42,
+      "end": 7.98,
+      "confidence": 0.995,
+      "velocity": 69
+    },
+    {
+      "pitch": 60,
+      "name": "C4",
+      "start": 7.96,
+      "end": 8,
+      "confidence": 0.993,
+      "velocity": 63
+    },
+    {
+      "pitch": 72,
+      "name": "C5",
+      "start": 7.96,
+      "end": 8,
+      "confidence": 0.989,
+      "velocity": 72
+    }
+  ],
+  "chords": [
+    {
+      "name": "C minor",
+      "start": 7.14,
+      "end": 7.42
+    }
+  ],
+  "pedals": [
+    {
+      "start": 0,
+      "end": 0.48
+    },
+    {
+      "start": 0.8,
+      "end": 4.72
+    },
+    {
+      "start": 5.04,
+      "end": 7.14
+    },
+    {
+      "start": 7.68,
+      "end": 7.94
+    }
+  ]
+}

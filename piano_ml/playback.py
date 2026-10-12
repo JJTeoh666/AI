@@ -133,7 +133,9 @@ class WavPlayer:
     def is_playing(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    def play(self, path: str | Path) -> float:
+    def play(self, path: str | Path, start_seconds: float = 0.0) -> float:
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise ValueError("Playback position must be finite and nonnegative.")
         self.stop()
         audio = wave.open(str(path), "rb")
         try:
@@ -141,6 +143,7 @@ class WavPlayer:
                     or audio.getnchannels() not in (1, 2)):
                 raise ValueError("Playback requires mono or stereo 16-bit PCM WAV.")
             duration = audio.getnframes() / audio.getframerate()
+            audio.setpos(min(audio.getnframes(), round(start_seconds * audio.getframerate())))
             output = _WaveOutput(audio.getframerate(), audio.getnchannels())
         except BaseException:
             audio.close()

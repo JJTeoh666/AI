@@ -3,6 +3,7 @@
 import json
 import math
 import wave
+from bisect import bisect_left, bisect_right
 from pathlib import Path
 
 import numpy as np
@@ -76,13 +77,66 @@ def active_at(result: dict, seconds: float) -> tuple[list[str], list[str]]:
     return notes, chords
 
 
+class EventIndex:
+    """Start-sorted intervals with maximum-end pruning for arbitrary seeks."""
+
+    def __init__(self, events):
+        self.entries = sorted(enumerate(events), key=lambda pair: pair[1]["start"])
+        self.starts = [event["start"] for _, event in self.entries]
+        self.size = 1 << (max(1, len(events)) - 1).bit_length()
+        self.max_ends = [-math.inf] * (2 * self.size)
+        for index, (_, event) in enumerate(self.entries):
+            self.max_ends[self.size + index] = event["end"]
+        for node in range(self.size - 1, 0, -1):
+            self.max_ends[node] = max(self.max_ends[node * 2:node * 2 + 2])
+
+    def _query(self, start, stop):
+        matches = []
+        pending = [(1, 0, self.size)]
+        while pending:
+            node, first, last = pending.pop()
+            if first >= stop or self.max_ends[node] <= start:
+                continue
+            if last - first == 1:
+                matches.append(self.entries[first])
+            else:
+                middle = (first + last) // 2
+                pending.extend(((node * 2 + 1, middle, last), (node * 2, first, middle)))
+        return [event for _, event in sorted(matches)]
+
+    def at(self, seconds):
+        return self._query(seconds, bisect_right(self.starts, seconds))
+
+    def overlapping(self, start, end):
+        return self._query(start, bisect_left(self.starts, end)) if end > start else []
+
+    def starting_between(self, start, end):
+        return [event for _, event in sorted(self.entries[bisect_left(self.starts, start):
+                                                        bisect_left(self.starts, end)])]
+
+
+class PredictionIndex:
+    def __init__(self, result):
+        self.notes = EventIndex(result["notes"])
+        self.chords = EventIndex(result["chords"])
+
+    def active_at(self, seconds):
+        return ([note["name"] for note in self.notes.at(seconds)],
+                [chord["name"] for chord in self.chords.at(seconds)])
+
+
 def draw_prediction(figure: Figure, result: dict,
                     envelope: tuple[np.ndarray, np.ndarray] | None = None) -> list:
     figure.clear()
     figure.set_facecolor("#ffffff")
     audio_name = Path(result.get("audio") or "Piano recording").name
     model_name = Path(result.get("model") or "Saved result").name
-    figure.suptitle(f"{audio_name}  |  {model_name}  |  threshold {result.get('threshold', 0.5):.2f}",
+    if result.get("engine") == "basic-pitch":
+        thresholds = result.get("thresholds", {})
+        threshold_label = f"frame {thresholds.get('frame', .3):.2f} / onset {thresholds.get('onset', .5):.2f}"
+    else:
+        threshold_label = f"threshold {result.get('threshold', 0.5):.2f}"
+    figure.suptitle(f"{audio_name}  |  {model_name}  |  {threshold_label}",
                     x=0.075, ha="left", fontsize=10, color="#344054",
                     fontfamily=plot_font_families())
     grid = figure.add_gridspec(3, 1, height_ratios=(1, 4, 0.9), hspace=0.08)

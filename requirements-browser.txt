@@ -1,0 +1,3 @@
+# Optional, one-time browser model export; the hosted Site needs no Python.
+onnx>=1.17
+onnxruntime>=1.20

@@ -6,6 +6,7 @@ from functools import lru_cache
 import numpy as np
 from matplotlib import font_manager
 from matplotlib.ft2font import FT2Font
+from matplotlib.collections import LineCollection, PatchCollection
 from matplotlib.patches import Arc, Ellipse, PathPatch
 from matplotlib.path import Path
 from matplotlib.textpath import TextPath
@@ -63,7 +64,7 @@ def _clef(axis, glyph, x, bottom, height, fallback):
 
 
 def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
-               bars_per_page: int = 2, names: bool = False) -> tuple:
+               bars_per_page: int = 2, names: bool = False, event_index=None) -> tuple:
     if not 30 <= bpm <= 300:
         raise ValueError("Notation tempo must be between 30 and 300 BPM.")
     beats_per_page = bars_per_page * 4
@@ -72,7 +73,8 @@ def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
     page = max(0, min(page, pages - 1))
     start = page * seconds_per_page
     end = min(result["duration"], start + seconds_per_page)
-    visible = sorted((note for note in result["notes"]
+    candidates = event_index.notes.overlapping(start, end) if event_index is not None else result["notes"]
+    visible = sorted((note for note in candidates
                       if note["start"] < end and note["end"] > start),
                      key=lambda note: (note["start"], note["pitch"]))
     figure.clear()
@@ -104,6 +106,7 @@ def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
                   fontsize=8, color="#667085")
     accidental_state = {}
     occupied = {}
+    heads, curves, segments, line_widths = [], [], [], []
     for note in visible:
         clef, y, sharp = staff_pitch(note["pitch"])
         local_beat = max(0, (note["start"] - start) * bpm / 60)
@@ -116,17 +119,19 @@ def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
         occupied[key] = y
         value, flags, dotted = note_value(note["end"] - note["start"], bpm)
         hollow = value >= 2
-        axis.add_patch(Ellipse((x, y), 0.18, 0.57, angle=0,
+        heads.append(Ellipse((x, y), 0.18, 0.57, angle=0,
                               facecolor="white" if hollow else "#17243b",
                               edgecolor="#17243b", linewidth=1.1, zorder=3))
         bottom = 0 if clef == "treble" else -10
         # Ledger lines occur at every whole step outside the staff.
         if y <= bottom - 1:
             for ledger in np.arange(bottom - 1, y - 0.01, -1):
-                axis.plot([x - 0.16, x + 0.16], [ledger] * 2, color="#17243b", linewidth=0.8)
+                segments.append([(x - 0.16, ledger), (x + 0.16, ledger)])
+                line_widths.append(0.8)
         if y >= bottom + 5:
             for ledger in np.arange(bottom + 5, y + 0.01, 1):
-                axis.plot([x - 0.16, x + 0.16], [ledger] * 2, color="#17243b", linewidth=0.8)
+                segments.append([(x - 0.16, ledger), (x + 0.16, ledger)])
+                line_widths.append(0.8)
         acc_key = (int(beat // 4), clef, y)
         previous_sharp = accidental_state.get(acc_key, False)
         if sharp or previous_sharp != sharp:
@@ -136,24 +141,32 @@ def draw_staff(figure, result: dict, bpm: float = 120, page: int = 0,
             direction = -1 if y >= bottom + 2 else 1
             stem_x = x + 0.09 * direction
             stem_tip = y + 2.8 * direction
-            axis.plot([stem_x] * 2, [y, stem_tip], color="#17243b", linewidth=1.0)
+            segments.append([(stem_x, y), (stem_x, stem_tip)])
+            line_widths.append(1.0)
             for flag in range(flags):
                 tip = stem_tip - direction * flag * 0.42
                 flag_path = Path([(stem_x, tip), (stem_x + 0.18, tip - direction * 0.3),
                                   (stem_x + 0.15, tip - direction * 0.9),
                                   (stem_x + 0.07, tip - direction * 1.1)],
                                  [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
-                axis.add_patch(PathPatch(flag_path, fill=False, linewidth=1.1, color="#17243b"))
+                curves.append(PathPatch(flag_path, fill=False, linewidth=1.1, color="#17243b"))
         if dotted:
-            axis.add_patch(Ellipse((x + 0.22, y + (0.24 if y % 1 == 0 else 0)),
+            heads.append(Ellipse((x + 0.22, y + (0.24 if y % 1 == 0 else 0)),
                                   0.035, 0.12, facecolor="#17243b", edgecolor="none"))
         if note["start"] < start:
-            axis.add_patch(Arc((x - 0.15, y - 0.55), 0.30, 0.45,
+            curves.append(Arc((x - 0.15, y - 0.55), 0.30, 0.45,
                                theta1=190, theta2=350, color="#667085", linewidth=0.8))
         if names:
             axis.text(x, y - 1.0, note["name"], ha="center", fontsize=7, color="#126b60",
                       fontfamily=plot_font_families())
-    for chord in result["chords"]:
+    if segments:
+        axis.add_collection(LineCollection(segments, colors="#17243b", linewidths=line_widths, zorder=2))
+    if curves:
+        axis.add_collection(PatchCollection(curves, match_original=True, zorder=2))
+    if heads:
+        axis.add_collection(PatchCollection(heads, match_original=True, zorder=3))
+    chords = event_index.chords.starting_between(start, end) if event_index is not None else result["chords"]
+    for chord in chords:
         if start <= chord["start"] < end:
             axis.text((chord["start"] - start) * bpm / 60 + 0.2, 6.6,
                       chord["name"], fontsize=8, color="#126b60", clip_on=True,
