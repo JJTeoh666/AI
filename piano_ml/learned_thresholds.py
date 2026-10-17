@@ -140,3 +140,9 @@ class PitchFourScoreThresholds(PitchBalancedThresholds):
     """V8: optimize continuous cutoffs for mean per-pitch F0, F1, F2 and F3."""
 
     betas = (0, 1, 2, 3)
+
+
+class PitchFiveScoreThresholds(PitchBalancedThresholds):
+    """V11: global cutoffs optimized for mean per-pitch F1 through F5."""
+
+    betas = (1, 2, 3, 4, 5)

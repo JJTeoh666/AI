@@ -46,12 +46,14 @@ class Calibration:
         for values, counts in self.counts.items():
             onset = precision_recall_f1(*counts["onset"])
             note = precision_recall_f1(*counts["note"])
-            report = pitch_note_report(self.pitch_counts[values], LOW_NOTE)
+            extra = (extra_metrics or {}).get(values, {})
+            include_f12345 = metric == "note_macro_f12345" or tuple(extra.get("avgf_betas", ())) == (1, 2, 3, 4, 5)
+            report = pitch_note_report(self.pitch_counts[values], LOW_NOTE, include_f12345=include_f12345)
             for row in report["per_pitch_notes"]:
                 row["name"] = pitch_name(row["pitch"])
             pitch_reports[values] = report["per_pitch_notes"]
             curve.append({"threshold": values.summary()["frame"], "thresholds": values.to_dict(),
-                          **(extra_metrics or {}).get(values, {}),
+                          **extra,
                           **precision_recall_f1(*counts["frame"]), "onset_f1": onset["f1"],
                           **note_f_scores(*counts["note"]), "note_precision": note["precision"],
                           "note_recall": note["recall"],
@@ -62,7 +64,7 @@ class Calibration:
             best = min(curve, key=lambda entry: entry["avgf_loss"])
         else:
             best = max(curve, key=lambda entry: (entry[metric],
-                entry["onset_f1"] if metric in ("note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123") else 0, entry["f1"],
+                entry["onset_f1"] if metric in ("note_f1", "note_f_avg", "note_macro_f03", "note_macro_f0123", "note_macro_f12345") else 0, entry["f1"],
                 -sum(abs(value - 0.5) for value in Thresholds(**entry["thresholds"]).summary().values())))
         return {**best, "threshold_curve": curve,
                 "per_pitch_notes": pitch_reports[Thresholds(**best["thresholds"])]}

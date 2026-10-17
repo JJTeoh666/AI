@@ -15,7 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from .inference import transcribe_audio, load_model
-from .basic_pitch import transcribe_basic_pitch
+from .bytedance import transcribe_bytedance
 import torch
 from .thresholds import Thresholds, saved_thresholds
 from .score import draw_staff
@@ -26,7 +26,7 @@ from .viewer import PredictionIndex, draw_prediction, read_prediction, waveform_
 
 PROJECT = Path(__file__).resolve().parent.parent
 OVERLAP_METHODS = {"Weighted average": "weighted", "50/50 average": "equal", "Keep center": "crop"}
-RESULT_LABELS = {"Your model": "own", "Basic Pitch": "basic"}
+RESULT_LABELS = {"Your model": "own", "ByteDance": "bytedance"}
 PLAYBACK_SOURCES = (*RESULT_LABELS, "Original recording")
 PLAYBACK_REFRESH_MS = 33
 
@@ -67,7 +67,7 @@ class PianoApp:
         self.device = tk.StringVar(value="auto")
         self.overlap_seconds = tk.DoubleVar(value=2.0)
         self.overlap_method = tk.StringVar(value="Weighted average")
-        self.status = tk.StringVar(value="Choose a piano WAV. Analyze your model or compare with Basic Pitch.")
+        self.status = tk.StringVar(value="Choose a piano WAV. Analyze your model or compare with ByteDance.")
         self.summary = tk.StringVar(value="No analysis loaded")
         self.cursor_text = tk.StringVar(value="Click the timeline to inspect notes at a moment.")
         self.model_paths: dict[str, Path] = {}
@@ -78,7 +78,7 @@ class PianoApp:
         self.recording_path = None
         self.selected_result = tk.StringVar(value="Your model")
         self.playback_source = tk.StringVar(value="Your model")
-        self.result_summaries = {key: tk.StringVar(value="No analysis yet") for key in ("own", "basic")}
+        self.result_summaries = {key: tk.StringVar(value="No analysis yet") for key in ("own", "bytedance")}
         self.seek_value = tk.DoubleVar(value=0)
         self.position_text = tk.StringVar(value="0:00 / 0:00")
         self.playback_position = 0.0
@@ -156,7 +156,7 @@ class PianoApp:
         self.model_browse_button.grid(row=1, column=2, padx=(8, 0))
         self.refresh_button = ttk.Button(controls, text="Refresh models", command=self.refresh_models)
         self.refresh_button.grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(controls, text="PyTorch checkpoint · V8.1–V10.1", style="Card.TLabel").grid(row=2, column=1, columnspan=2, sticky="e")
+        ttk.Label(controls, text="PyTorch checkpoint · V8.1–V12.1", style="Card.TLabel").grid(row=2, column=1, columnspan=2, sticky="e")
         audio_card = ttk.Frame(inputs, style="Card.TFrame", padding=14)
         audio_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         audio_card.columnconfigure(0, weight=1)
@@ -205,7 +205,7 @@ class PianoApp:
                      state="readonly", width=7).pack(side="left", padx=8)
         self.analyze_button = ttk.Button(options, text="Analyze", style="Accent.TButton", command=self.analyze)
         self.analyze_button.pack(side="left", padx=10)
-        self.compare_button = ttk.Button(options, text="Compare with Basic Pitch", command=self.analyze_basic)
+        self.compare_button = ttk.Button(options, text="Compare with ByteDance", command=self.analyze_bytedance)
         self.compare_button.pack(side="left", padx=(0, 8))
         self.cancel_button = ttk.Button(options, text="Cancel", command=self.cancel_event.set, state="disabled")
         self.cancel_button.pack(side="left")
@@ -223,7 +223,7 @@ class PianoApp:
             button.pack(anchor="w")
             self.result_buttons[key] = button
             ttk.Label(card, textvariable=self.result_summaries[key], style="Card.TLabel").pack(anchor="w", pady=(6, 0))
-            ttk.Label(card, text="Learned thresholds, velocity & sustain" if key == "own" else "Spotify model · CPU · No sustain pedal",
+            ttk.Label(card, text="Learned thresholds, velocity & sustain" if key == "own" else "Pretrained · Notes, velocity & sustain",
                       style="Card.TLabel").pack(anchor="w", pady=(3, 0))
         ttk.Label(outer, textvariable=self.summary, wraplength=820, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(3, 8))
         tabs = self.tabs = ttk.Notebook(outer)
@@ -395,7 +395,7 @@ class PianoApp:
             self.model_paths[path.name] = path
         self.models_box["values"] = list(self.model_paths)
         if not self.model.get() and self.model_paths:
-            preferred = ("piano-v10.1.pt", "piano-v10.pt", "piano-v9.pt", "piano-v8.1.pt", "piano-v8.pt", "piano-v7.pt", "piano-v6.pt", "piano-v5.pt", "piano-v2-separate.pt", "piano-v2-tuned.pt", "piano-v2.pt", "piano-tuned.pt", "piano.pt", "piano-demo.pt")
+            preferred = ("piano-v12.1.pt", "piano-v12.pt", "piano-v11.1.pt", "piano-v11.pt", "piano-v10.1.pt", "piano-v10.pt", "piano-v9.pt", "piano-v8.1.pt", "piano-v8.pt", "piano-v7.pt", "piano-v6.pt", "piano-v5.pt", "piano-v2-separate.pt", "piano-v2-tuned.pt", "piano-v2.pt", "piano-tuned.pt", "piano.pt", "piano-demo.pt")
             first = next((name for name in preferred if name in self.model_paths), next(iter(self.model_paths)))
             self.model.set(first)
         self.preview_thresholds()
@@ -457,7 +457,7 @@ class PianoApp:
             self.recording_path = str(Path(selected).resolve())
             self.configure_duration(duration)
             self.update_result_controls()
-            self.status.set("Recording ready. Analyze your model or compare with Basic Pitch.")
+            self.status.set("Recording ready. Analyze your model or compare with ByteDance.")
 
     def clear_results(self):
         self.stop()
@@ -533,7 +533,7 @@ class PianoApp:
         device = self.device.get()
         threading.Thread(target=self._worker, args=(audio, model, thresholds, device, overlap, overlap_blend), daemon=True).start()
 
-    def analyze_basic(self):
+    def analyze_bytedance(self):
         if self.busy:
             return
         audio = Path(self.audio.get())
@@ -543,15 +543,15 @@ class PianoApp:
         self.ensure_recording(audio)
         self.stop()
         self.cancel_event.clear()
-        self.set_busy(True, "basic")
+        self.set_busy(True, "bytedance")
         self.progress["value"] = 0
-        self.status.set(f"Analyzing {audio.name} with Spotify Basic Pitch (CPU)…")
-        threading.Thread(target=self._basic_worker, args=(audio,), daemon=True).start()
+        self.status.set(f"Analyzing {audio.name} with ByteDance ({self.device.get()})…")
+        threading.Thread(target=self._bytedance_worker, args=(audio, self.device.get()), daemon=True).start()
 
-    def _basic_worker(self, audio):
+    def _bytedance_worker(self, audio, device="auto"):
         try:
-            result = transcribe_basic_pitch(audio, cancel=self.cancel_event,
-                                           progress=lambda done, total: self.messages.put(("progress", (done, total))))
+            result = transcribe_bytedance(audio, device=device, cancel=self.cancel_event,
+                                          progress=lambda done, total: self.messages.put(("progress", (done, total))))
             envelope = waveform_envelope(audio)
             if self.cancel_event.is_set():
                 raise InterruptedError()
@@ -666,8 +666,10 @@ class PianoApp:
         self._poll_after = self.root.after(interval, self.poll)
 
     def show_result(self, result: dict, envelope=None, *, store=True, restore_settings=True, position=0.0) -> None:
+        if result.get("engine") not in (None, "piano", "bytedance"):
+            raise ValueError("This saved comparison engine is no longer supported. Analyze the recording with a current model.")
         self._halt_playback()
-        result_kind = "basic" if result.get("engine") == "basic-pitch" else "own"
+        result_kind = "bytedance" if result.get("engine") == "bytedance" else "own"
         if store:
             identity = result.get("audio")
             if identity:
@@ -679,7 +681,7 @@ class PianoApp:
             timing = f" · {seconds:.2f} s analysis" if seconds is not None else ""
             self.result_summaries[result_kind].set(f"{len(result['notes'])} notes · {len(result['chords'])} chords{timing}")
         self.result_kind = result_kind
-        label = "Basic Pitch" if result_kind == "basic" else "Your model"
+        label = "ByteDance" if result_kind == "bytedance" else "Your model"
         self.selected_result.set(label)
         self.playback_source.set(label)
         self.result = result
@@ -721,8 +723,8 @@ class PianoApp:
                 f"{chord['start']:.3f}", f"{chord['end']:.3f}", f"{chord['end'] - chord['start']:.3f}"))
         model_name = Path(result["model"]).name if result.get("model") else "Saved result"
         summary = thresholds.summary()
-        if result_kind == "basic":
-            threshold_label = "Basic Pitch: frame 0.30 / onset 0.50 · No pedal detection"
+        if result_kind == "bytedance":
+            threshold_label = f"ByteDance: frame/onset/offset 0.10/0.30/0.30 · {len(result.get('pedals', []))} pedal intervals"
         elif thresholds.pitch_dependent:
             threshold_label = "pitch-dependent thresholds"
         else:
@@ -1036,7 +1038,7 @@ class PianoApp:
             self.player.set_gain(decibels)
 
     def play_result(self) -> None:
-        self.playback_source.set("Basic Pitch" if self.result_kind == "basic" else "Your model")
+        self.playback_source.set("ByteDance" if self.result_kind == "bytedance" else "Your model")
         self.prepare_result_audio()
 
     def export_audio(self) -> None:

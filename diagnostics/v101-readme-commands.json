@@ -1,5 +1,5 @@
 {
-  "preserved_old_fenced_commands": 28,
+  "preserved_old_fenced_commands": 27,
   "training_table_rows": 23,
   "missing_commands": [],
   "previous_commands": [
@@ -20,7 +20,6 @@
     "python -m piano_ml train --data data/maestro --resume checkpoints/piano-v8.last.pt --output checkpoints/piano-v8.1.pt --middle-sampling 0 --bass-sampling 0 --treble-sampling 0 --middle-loss-weight 1 --edge-loss-weight 1 --reset-optimizer --lr 0.0001 --threshold-lr 0.001 --epochs 50 --windows-per-file 32 --batch-size 4 --augment --device auto",
     "python app.py",
     "python -m pip install -r requirements.txt",
-    "python diagnostics/download_basic_pitch.py",
     "python -m piano_ml download-piano",
     "python web_app.py",
     "python -m pip install -r requirements-browser.txt",
@@ -31,5 +30,6 @@
     "python -m piano_ml evaluate --data data/maestro --checkpoint checkpoints/piano-v9.pt --split validation --full-recordings --output validation-v9.json --device auto",
     "python -m piano_ml evaluate --data data/maestro --checkpoint checkpoints/piano-v9.pt --split test --full-recordings --output test-v9.json --device auto",
     "python -m unittest discover -s tests -v"
-  ]
+  ],
+  "replacement_comparison_command": "python diagnostics/download_bytedance.py"
 }

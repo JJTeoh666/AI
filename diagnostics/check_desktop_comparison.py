@@ -28,13 +28,13 @@ def main():
         app.poll()
         assert app.result and app.result_kind == "own", app.status.get()
         own_settings = app.threshold.get(), app.onset_threshold.get(), app.offset_threshold.get(), app.overlap_method.get()
-        app._basic_worker(audio)
+        app._bytedance_worker(audio, "cpu")
         app.poll()
-        assert set(app.results) == {"own", "basic"}, app.status.get()
+        assert set(app.results) == {"own", "bytedance"}, app.status.get()
         assert own_settings == (app.threshold.get(), app.onset_threshold.get(), app.offset_threshold.get(), app.overlap_method.get())
         report = {"recording": str(audio), "piano": "same installed piano engine for both results", "results": {}}
         with tempfile.TemporaryDirectory(dir=project) as directory:
-            for key in ("own", "basic"):
+            for key in ("own", "bytedance"):
                 result = app.results[key]
                 wav = Path(directory) / f"{key}.wav"
                 export = Path(directory) / f"{key}-export.wav"
@@ -50,11 +50,11 @@ def main():
                 path.write_text(json.dumps(result), encoding="utf-8")
                 assert len(read_prediction(path)["notes"]) == len(result["notes"])
                 report["results"][key] = {"notes": len(result["notes"]), "chords": len(result["chords"]),
-                                           "duration": result["duration"], "analysis_seconds": result["analysis_seconds"],
+                                           "duration": result["duration"], "pedals": len(result.get("pedals", [])), "analysis_seconds": result["analysis_seconds"],
                                            "channels": channels, "sample_rate": rate,
                                            "pcm_peak": float(np.max(np.abs(samples.astype(float))))}
-            assert app.audio_cache["own"] != app.audio_cache["basic"]
-        report["checks"] = ["same WAV", "real checkpoint and Basic Pitch inference", "own settings preserved",
+            assert app.audio_cache["own"] != app.audio_cache["bytedance"]
+        report["checks"] = ["same WAV", "real checkpoint and ByteDance inference", "own settings preserved",
                             "separate cached piano WAVs", "non-silent audio", "JSON and audio export"]
         output = project / "diagnostics/desktop-comparison-check.json"
         output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

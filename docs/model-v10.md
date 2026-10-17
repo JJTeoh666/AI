@@ -2,7 +2,7 @@
 
 [Back to the README](../README.md) · [V10 training commands](../README.md#training-commands) · [V9 commands](../README.md#training-commands) · [V8.1 commands](../README.md#training-commands)
 
-V10 is `onsets-cqt-harmonic-recurrent`, with **3,035,788 trainable parameters** at the default dimensions. Fresh auto training now selects V10.1; use the explicit architecture flag to start V10. Its model version is `10` and checkpoint format version is `11`. Resume restores the checkpoint's architecture; the explicit V9 and V8.1 training commands remain available and their structures are unchanged.
+V10 is `onsets-cqt-harmonic-recurrent`, with **3,035,788 trainable parameters** at the default dimensions. Fresh auto training now selects V12.1; use the explicit architecture flag to start V10. Its model version is `10` and checkpoint format version is `11`. Resume restores the checkpoint's architecture; the explicit V9 and V8.1 training commands remain available and their structures are unchanged.
 
 ## Structure
 
@@ -72,7 +72,7 @@ V10 retains:
 
 Default outputs are `piano-v10.pt`, `piano-v10.last.pt` and `piano-v10.history.jsonl`. A fresh model uses random weights. `--init-from` accepts compatible V10 checkpoints and starts a fresh optimizer and epoch count. Older architectures cannot initialize V10. Use their own explicit start commands or resume their saved checkpoints.
 
-The desktop app displays V10 and supports the existing score, piano playback, Basic Pitch comparison and all three overlap methods. The CLI and local Python web app can also use V10 `.pt` files. The **browser-only Site and ONNX exporter currently support V8.1/V9**, without V10's new CQT preprocessing.
+The desktop app displays V10 and supports the existing score, piano playback, ByteDance comparison and all three overlap methods. The CLI and local Python web app can also use V10 `.pt` files. The **browser-only Site and ONNX exporter currently support V8.1/V9**, without V10's new CQT preprocessing.
 
 ## Parameter budget and options
 

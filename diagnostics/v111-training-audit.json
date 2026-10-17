@@ -1,0 +1,278 @@
+{
+  "snapshot": {
+    "date": "2026-10-15",
+    "timezone": "Asia/Kuala_Lumpur",
+    "history": "checkpoints/piano-v11.history.jsonl",
+    "completed_epochs": 149,
+    "epoch_resets": 0,
+    "best_checkpoint_epoch": 100,
+    "latest_checkpoint_epoch": 149,
+    "checkpoint_files_modified": false,
+    "optimizer_steps_performed_by_audit": 0
+  },
+  "runtime": {
+    "pytorch": "2.12.0.dev20260402+cu128",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "model_parameters": 10256830,
+    "fan_encoder_parameters": 2803776,
+    "main_gru_parameters": 3537408,
+    "rnn_backend_requested": "auto",
+    "main_gru_cudnn_enabled": false,
+    "pedal_gru_cudnn_enabled": false,
+    "native_gru_reason": "The existing Windows nightly stability safeguard disables cuDNN recurrence."
+  },
+  "active_data": {
+    "train_recordings": 60,
+    "train_hours": 4.374697853805305,
+    "validation_recordings": 16,
+    "validation_hours": 1.4711270678278612,
+    "test_recordings": 4,
+    "test_hours": 0.17278491225402778,
+    "windows_per_training_file": 32,
+    "window_seconds": 4,
+    "augmentation": true
+  },
+  "epoch_timing_seconds": {
+    "train": {
+      "median": 247.43206069999724,
+      "min": 202.4869763001334,
+      "max": 338.5992352999747,
+      "last20_median": 268.00680114999705
+    },
+    "validation": {
+      "median": 8.761220600001252,
+      "min": 7.659414099995047,
+      "max": 14.258223400000134,
+      "last20_median": 11.310212800002773
+    },
+    "total": {
+      "median": 255.78703519999544,
+      "min": 210.32619239995256,
+      "max": 351.2945894000586,
+      "last20_median": 280.68543029999637
+    },
+    "summed_history_hours": 10.768618831611294
+  },
+  "saved_v11_scheduler": {
+    "patience": 6,
+    "reduction_on_consecutive_bad_epoch": 7,
+    "factor": 0.5,
+    "min_lr": 0.000001,
+    "threshold_mode": "rel",
+    "threshold": 0.0001,
+    "checkpoint_best_improvement_absolute": 0.000001,
+    "lr_changes": [
+      {
+        "epoch": 1,
+        "recognizer_lr": 0.0003,
+        "threshold_lr": 0.003,
+        "stale_epochs": 0
+      },
+      {
+        "epoch": 55,
+        "recognizer_lr": 0.00015,
+        "threshold_lr": 0.0015,
+        "stale_epochs": 7
+      },
+      {
+        "epoch": 73,
+        "recognizer_lr": 0.000075,
+        "threshold_lr": 0.00075,
+        "stale_epochs": 7
+      },
+      {
+        "epoch": 88,
+        "recognizer_lr": 0.0000375,
+        "threshold_lr": 0.000375,
+        "stale_epochs": 7
+      },
+      {
+        "epoch": 97,
+        "recognizer_lr": 0.00001875,
+        "threshold_lr": 0.0001875,
+        "stale_epochs": 7
+      },
+      {
+        "epoch": 107,
+        "recognizer_lr": 0.000009375,
+        "threshold_lr": 0.00009375,
+        "stale_epochs": 7
+      },
+      {
+        "epoch": 114,
+        "recognizer_lr": 0.0000046875,
+        "threshold_lr": 0.000046875,
+        "stale_epochs": 14
+      },
+      {
+        "epoch": 121,
+        "recognizer_lr": 0.00000234375,
+        "threshold_lr": 0.0000234375,
+        "stale_epochs": 21
+      },
+      {
+        "epoch": 128,
+        "recognizer_lr": 0.000001171875,
+        "threshold_lr": 0.00001171875,
+        "stale_epochs": 28
+      },
+      {
+        "epoch": 135,
+        "recognizer_lr": 0.000001,
+        "threshold_lr": 0.000005859375,
+        "stale_epochs": 35
+      },
+      {
+        "epoch": 142,
+        "recognizer_lr": 0.000001,
+        "threshold_lr": 0.0000029296875,
+        "stale_epochs": 42
+      },
+      {
+        "epoch": 149,
+        "recognizer_lr": 0.000001,
+        "threshold_lr": 0.00000146484375,
+        "stale_epochs": 49
+      }
+    ]
+  },
+  "convergence": {
+    "epoch1": {
+      "train_frame_bce": 0.5344461557765802,
+      "val_frame_bce": 0.4540616776794195,
+      "val_avgf_loss": 0.4500070589088977,
+      "note_f1": 0.0009296920395119117
+    },
+    "best_epoch100": {
+      "train_frame_bce": 0.0668298510562939,
+      "val_frame_bce": 0.13843532965984195,
+      "val_avgf_loss": 0.2845896194477705,
+      "val_avgf_data_loss": 0.28451373414603665,
+      "val_avgf_prior_loss": 0.00007588530173385048,
+      "onset_f1": 0.5636202802737558,
+      "note_f1": 0.36575259555845246,
+      "note_precision": 0.30285273708558214,
+      "note_recall": 0.46162886355623456,
+      "note_macro_f12345": 0.34094498456584904,
+      "thresholds": {
+        "frame": 0.5582427978515625,
+        "onset": 0.5969886183738708,
+        "offset": 0.5828466415405273
+      }
+    },
+    "latest_epoch149": {
+      "train_frame_bce": 0.06385250615033632,
+      "val_frame_bce": 0.13604002026841044,
+      "val_avgf_loss": 0.285032456380286,
+      "val_avgf_data_loss": 0.2849566853977005,
+      "val_avgf_prior_loss": 0.00007577098258551019,
+      "onset_f1": 0.569974554707379,
+      "note_f1": 0.36980491942324,
+      "note_macro_f12345": 0.34071170757673247,
+      "stale_epochs": 49,
+      "thresholds": {
+        "frame": 0.5593593716621399,
+        "onset": 0.5971712470054626,
+        "offset": 0.5851901769638062
+      }
+    },
+    "diagnostic_maxima": {
+      "note_f1": {
+        "epoch": 141,
+        "value": 0.3714689265536723
+      },
+      "onset_f1": {
+        "epoch": 144,
+        "value": 0.5720222914895626
+      },
+      "note_macro_f12345": {
+        "epoch": 114,
+        "value": 0.34267076470333285
+      }
+    },
+    "interpretation": "The recognizer learned substantially, then validation AvgF plateaued. Training/validation frame BCE shows a generalization gap. The prior penalty is small. Decoded note scores and smooth AvgF do not improve in lockstep."
+  },
+  "in_memory_stage_profile": {
+    "mode": "eval",
+    "batch_size": 4,
+    "audio_seconds": 4,
+    "frames": 201,
+    "warmup_forwards": 1,
+    "timed_forwards": 3,
+    "statistic": "median CUDA-synchronized wall time in milliseconds; hooks introduce synchronization",
+    "stage_medians_ms": {
+      "short_stft": 0.312,
+      "short_encoder": 15.705,
+      "raw_fan_encoder": 1.744,
+      "fusion": 0.43,
+      "main_gru": 71.773,
+      "sequence_norm": 0.152,
+      "residual_cnn": 1.111,
+      "pedal_gru": 23.864,
+      "pedal_norm": 0.108,
+      "pedal_head": 0.092,
+      "onset_head": 0.102,
+      "frame_head": 0.093,
+      "offset_head": 0.086,
+      "offset_refinement": 0.184,
+      "velocity_head": 0.084,
+      "pedal_onset_head": 0.076,
+      "pedal_offset_head": 0.06
+    },
+    "training_forward_backward_ms": [
+      2044.345,
+      711.915,
+      975.946
+    ],
+    "training_peak_cuda_allocated_mb": 1026,
+    "limitation": "Short diagnostic only. Cold-start and possible concurrent GPU activity affect measurements. No optimizer update was made. This does not establish an epoch-time speedup for V11.1.",
+    "interpretation": "Native recurrence dominates the measured forward stages; the FAN encoder is a small share. Replacing FAN with FFT changes representation but is not expected by itself to remove the main measured runtime bottleneck."
+  },
+  "small_duration_diagnostic": {
+    "checkpoint_epoch": 100,
+    "validation_indices": [
+      0,
+      16,
+      32
+    ],
+    "window_seconds": 4,
+    "note_targets": "sustain_extended",
+    "clip_boundary_handling": "Existing window_note_pairs interior-note filtering",
+    "reference_notes": 90,
+    "predicted_notes": 121,
+    "onset_f1": 0.5687203791469194,
+    "onset_offset_note_f1": 0.35071090047393366,
+    "reference_duration_median_seconds": 0.5286458333333339,
+    "predicted_duration_median_seconds": 0.08000000000000007,
+    "onset_matched_notes": 60,
+    "onset_matched_duration_ratio_median": 0.547368421052632,
+    "onset_matched_absolute_duration_error_median_seconds": 0.06104166666666666,
+    "limitation": "Only three windows, not an estimate over the validation set. Pitch/onset matching used one-to-one maximum bipartite matching within 50 ms.",
+    "interpretation": "Premature note endings or fragmentation remain visible despite sustain-extended targets; a frontend swap alone does not guarantee better duration accuracy."
+  },
+  "code_review": {
+    "v111_scheduler_review": {
+      "requested_consecutive_failures": 15,
+      "pytorch_internal_patience": 14,
+      "improvement_threshold": 0.000001,
+      "threshold_mode": "abs",
+      "reduction_factor": 0.5,
+      "minimum_lr": 0.000001,
+      "explicit_override_reapplied_after_restore": true,
+      "omitted_override_preserves_saved_rule": true,
+      "explicit_override_preserves_accumulated_bad_epoch_count": true,
+      "legacy_saved_scheduler_retains_relative_threshold_when_no_override": true,
+      "compatibility_note": "Fresh older architectures also use the helper's exact consecutive-count and absolute-threshold semantics; legacy saved resumes retain their prior rule."
+    },
+    "threshold_gradients": "Classifier probabilities are detached only inside the threshold surrogate. Classifier parameters still receive the supervised frame/onset/offset/release/velocity/pedal losses; this separation is intentional.",
+    "observed_resume_issue": "Loading the saved scheduler state after constructing it overwrites a newly supplied --lr-patience unless the explicit override is reapplied.",
+    "improvement_consistency": "V11 checkpoint selection uses an absolute 1e-6 change; its scheduler uses a relative 1e-4 change. V11.1 should use a shared absolute criterion.",
+    "recommendations": [
+      "Apply the requested 15-consecutive-non-improvement rule exactly and preserve explicit overrides on resume.",
+      "Keep the Windows nightly native-recurrence safeguard unless a stable PyTorch/cuDNN environment passes shutdown tests.",
+      "Compare V11.1 and V11 using the same deterministic windows, decoded note metrics and duration diagnostics.",
+      "Use broader training recordings to address generalization; more model capacity alone is not supported by these logs."
+    ]
+  }
+}

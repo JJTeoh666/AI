@@ -2,7 +2,7 @@
 
 [Back to the README](../README.md) · [V9 training commands](../README.md#training-commands) · [V8.1 reference](model-v8.md)
 
-V9 is a separate architecture, `onsets-triple-residual-recurrent`, with **10,168,060 trainable parameters** at default settings. Use its explicit architecture flag to start V9; fresh auto training now selects V10.1. Model version is `9`; checkpoint format version is `10`. Resume restores the saved architecture, so existing V8/V8.1 runs continue as V8.1.
+V9 is a separate architecture, `onsets-triple-residual-recurrent`, with **10,168,060 trainable parameters** at default settings. Use its explicit architecture flag to start V9; fresh auto training now selects V12.1. Model version is `9`; checkpoint format version is `10`. Resume restores the saved architecture, so existing V8/V8.1 runs continue as V8.1.
 
 ## Audio branches
 

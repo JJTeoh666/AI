@@ -1,0 +1,227 @@
+{
+  "audio": "C:\\jj\\AI\\diagnostics\\browser-clip.wav",
+  "model": "ByteDance piano transcription",
+  "engine": "bytedance",
+  "architecture": "bytedance-note-pedal-crnn",
+  "source_commit": "1ade7dcd4348add669a67c6e6282456c8c6633bd",
+  "duration": 8.0,
+  "analysis_seconds": 2.004054900025949,
+  "device": "cuda",
+  "thresholds": {
+    "frame": 0.1,
+    "onset": 0.3,
+    "offset": 0.3
+  },
+  "notes": [
+    {
+      "name": "G3",
+      "pitch": 55,
+      "start": 0.43242794275283813,
+      "end": 6.429999828338623,
+      "velocity": 53,
+      "confidence": 0.8845648169517517
+    },
+    {
+      "name": "G2",
+      "pitch": 43,
+      "start": 0.48961585760116577,
+      "end": 4.730000019073486,
+      "velocity": 30,
+      "confidence": 0.9626493453979492
+    },
+    {
+      "name": "D3",
+      "pitch": 50,
+      "start": 0.4975413978099823,
+      "end": 4.71999979019165,
+      "velocity": 32,
+      "confidence": 0.9857509732246399
+    },
+    {
+      "name": "G4",
+      "pitch": 67,
+      "start": 1.5375570058822632,
+      "end": 5.510000228881836,
+      "velocity": 48,
+      "confidence": 0.9798806309700012
+    },
+    {
+      "name": "A#3",
+      "pitch": 58,
+      "start": 1.5732543468475342,
+      "end": 4.789999961853027,
+      "velocity": 34,
+      "confidence": 0.7282230257987976
+    },
+    {
+      "name": "D4",
+      "pitch": 62,
+      "start": 4.234118938446045,
+      "end": 4.670000076293945,
+      "velocity": 64,
+      "confidence": 0.9868316650390625
+    },
+    {
+      "name": "D4",
+      "pitch": 62,
+      "start": 4.682516098022461,
+      "end": 7.130000114440918,
+      "velocity": 63,
+      "confidence": 0.9820994138717651
+    },
+    {
+      "name": "D3",
+      "pitch": 50,
+      "start": 4.734914779663086,
+      "end": 7.11227560043335,
+      "velocity": 35,
+      "confidence": 0.9893299341201782
+    },
+    {
+      "name": "G2",
+      "pitch": 43,
+      "start": 4.737887859344482,
+      "end": 7.112812519073486,
+      "velocity": 29,
+      "confidence": 0.9917231202125549
+    },
+    {
+      "name": "G4",
+      "pitch": 67,
+      "start": 5.5153913497924805,
+      "end": 7.1129631996154785,
+      "velocity": 57,
+      "confidence": 0.9968770146369934
+    },
+    {
+      "name": "F4",
+      "pitch": 65,
+      "start": 5.524389743804932,
+      "end": 6.670000076293945,
+      "velocity": 52,
+      "confidence": 0.9951648712158203
+    },
+    {
+      "name": "B3",
+      "pitch": 59,
+      "start": 5.550379276275635,
+      "end": 7.110865592956543,
+      "velocity": 36,
+      "confidence": 0.9938340783119202
+    },
+    {
+      "name": "D#4",
+      "pitch": 63,
+      "start": 6.34631872177124,
+      "end": 7.059999942779541,
+      "velocity": 70,
+      "confidence": 0.9959248304367065
+    },
+    {
+      "name": "F4",
+      "pitch": 65,
+      "start": 6.684200763702393,
+      "end": 7.070000171661377,
+      "velocity": 74,
+      "confidence": 0.9989216327667236
+    },
+    {
+      "name": "D#4",
+      "pitch": 63,
+      "start": 7.069533824920654,
+      "end": 8.0,
+      "velocity": 62,
+      "confidence": 0.980626106262207
+    },
+    {
+      "name": "F4",
+      "pitch": 65,
+      "start": 7.082505226135254,
+      "end": 7.139999866485596,
+      "velocity": 50,
+      "confidence": 0.7476956844329834
+    },
+    {
+      "name": "C3",
+      "pitch": 48,
+      "start": 7.1253886222839355,
+      "end": 7.984886646270752,
+      "velocity": 38,
+      "confidence": 0.9338441491127014
+    },
+    {
+      "name": "C2",
+      "pitch": 36,
+      "start": 7.125958442687988,
+      "end": 7.984602451324463,
+      "velocity": 43,
+      "confidence": 0.9407822489738464
+    },
+    {
+      "name": "D4",
+      "pitch": 62,
+      "start": 7.422441005706787,
+      "end": 7.984318256378174,
+      "velocity": 62,
+      "confidence": 0.9764543771743774
+    },
+    {
+      "name": "C4",
+      "pitch": 60,
+      "start": 7.950821876525879,
+      "end": 7.9852070808410645,
+      "velocity": 62,
+      "confidence": 0.915695071220398
+    }
+  ],
+  "chords": [
+    {
+      "name": "G minor",
+      "start": 1.5732543468475342,
+      "end": 4.789999961853027
+    },
+    {
+      "name": "G 7",
+      "start": 5.550379276275635,
+      "end": 6.34631872177124
+    }
+  ],
+  "pedals": [
+    {
+      "start": 0.009999999776482582,
+      "end": 0.467703253030777
+    },
+    {
+      "start": 0.7300000190734863,
+      "end": 4.721212863922119
+    },
+    {
+      "start": 5.010000228881836,
+      "end": 7.105400085449219
+    },
+    {
+      "start": 7.389999866485596,
+      "end": 7.982762336730957
+    }
+  ],
+  "pedal_detection": true,
+  "inference_config": {
+    "engine": "bytedance",
+    "sample_rate": 16000,
+    "frames_per_second": 100,
+    "segment_seconds": 10,
+    "overlap_seconds": 5,
+    "overlap_blend": "crop",
+    "thresholds": {
+      "onset": 0.3,
+      "offset": 0.3,
+      "frame": 0.1,
+      "pedal_offset": 0.2,
+      "pedal_frame": 0.5
+    },
+    "clip_boundary": "close-and-clamp"
+  },
+  "playback_config": {
+    "pitch_bends": false
+  }
+}

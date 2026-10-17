@@ -1,0 +1,24 @@
+ByteDance piano transcription integration
+
+Code: https://github.com/bytedance/piano_transcription
+Commit: 1ade7dcd4348add669a67c6e6282456c8c6633bd
+Files adapted: pytorch/models.py, utils/piano_vad.py,
+               RegressionPostProcessor from utils/utilities.py.
+The upstream README declares Apache 2.0; full terms are in LICENSE.
+Attribution: ByteDance; Qiuqiang Kong, Bochen Li, Xuchen Song, Yuan Wan,
+and Yuxuan Wang, High-resolution Piano Transcription with Pedals by
+Regressing Onsets and Offsets Times (2020), https://arxiv.org/abs/2010.01815.
+
+Local modifications (2026): frozen frontend built directly from checkpoint
+DFT/mel tensors (no librosa or torchlibrosa dependency), meta construction,
+strict tensor-only loading, native GRU for Windows nightly PyTorch,
+empty-note handling, cancellation checks, WAV loading/resampling, bounded
+segment inference, recording-boundary clamping/closure, and desktop schema.
+
+Weights: official combined note/pedal checkpoint, Zenodo record 4034264.
+https://doi.org/10.5281/zenodo.4034264
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+Author: Qiuqiang Kong. Checkpoint size: 171966578 bytes.
+MD5: 22b961b77c1878239fec963362097045 (publisher checksum).
+SHA256: c3fa9730725bf4a762f1c14bc80cd5986eacda01b026f5a4a2525cd607876141
+Weights are separate from this project's training checkpoints.

@@ -77,6 +77,61 @@ def chord_name(pitches: list[int]) -> str | None:
     return None
 
 
+def decode_pedal_events(probabilities: np.ndarray, duration: float,
+                        onset_probabilities: np.ndarray | None = None,
+                        offset_probabilities: np.ndarray | None = None) -> list[dict]:
+    """Decode activity with independent pedal events and a 100 ms release fallback.
+
+    Event thresholds are fixed at onset 0.3 and offset 0.2; activity uses 0.5.
+    This is used only by models that supply the additional pedal event heads.
+    """
+    if not len(probabilities) or duration <= 0:
+        return []
+    hop_seconds = HOP_LENGTH / SAMPLE_RATE
+    down = median_filter(probabilities[:, 0] >= 0.5, size=3, mode="nearest")
+    onset_peaks = set(find_peaks(np.pad(onset_probabilities[:, 0], (1, 1)),
+                               height=0.3, distance=2)[0] - 1) if onset_probabilities is not None else set()
+    offset_peaks = set(find_peaks(np.pad(offset_probabilities[:, 0], (1, 1)),
+                                height=0.2, distance=2)[0] - 1) if offset_probabilities is not None else set()
+    release_frames = max(2, round(0.1 / hop_seconds))
+    first = None
+    inactive = 0
+    intervals = []
+
+    def finish(last):
+        start = first * hop_seconds
+        end = min(last * hop_seconds, duration)
+        if end - start + 1e-9 >= 0.06:
+            intervals.append({"start": round(start, 3), "end": round(end, 3)})
+
+    for frame, is_down in enumerate(down):
+        if frame * hop_seconds >= duration:
+            break
+        if first is not None:
+            if frame > first and frame in offset_peaks:
+                finish(frame)
+                first = None
+                inactive = 0
+            else:
+                inactive = 0 if is_down else inactive + 1
+                if inactive >= release_frames:
+                    finish(frame - inactive + 1)
+                    first = None
+                    inactive = 0
+        if first is None:
+            # Rising activity covers missing event peaks and pedal carry-in.
+            # An offset while activity remains high cannot restart by itself.
+            rising = is_down and (frame == 0 or not down[frame - 1])
+            guided = frame in onset_peaks and np.any(
+                probabilities[max(0, frame - 1):frame + 3, 0] >= 0.5)
+            if (rising or guided) and frame not in offset_peaks:
+                first = frame
+                inactive = 0
+    if first is not None:
+        finish(len(probabilities))
+    return intervals
+
+
 def decode(probabilities: np.ndarray, duration: float, threshold: float = 0.5,
            min_note_seconds: float = 0.08, min_chord_seconds: float = 0.20,
            onset_probabilities: np.ndarray | None = None,
@@ -88,7 +143,9 @@ def decode(probabilities: np.ndarray, duration: float, threshold: float = 0.5,
            onset_threshold: float | None = None,
            offset_threshold: float | None = None,
            release_frames: int = 2, _cache: DecodeCache | None = None,
-           include_details: bool = True) -> dict:
+           include_details: bool = True,
+           pedal_onset_probabilities: np.ndarray | None = None,
+           pedal_offset_probabilities: np.ndarray | None = None) -> dict:
     values = Thresholds(frame=threshold, onset=threshold).override(
         frame=frame_threshold, onset=onset_threshold, offset=offset_threshold)
     frame_values, onset_values, offset_values = (values.array(head) for head in ("frame", "onset", "offset"))
@@ -182,6 +239,10 @@ def decode(probabilities: np.ndarray, duration: float, threshold: float = 0.5,
             segment_start = frame
     result = {"notes": notes, "chords": chords}
     if include_details and pedal_probabilities is not None:
+        if pedal_onset_probabilities is not None or pedal_offset_probabilities is not None:
+            result["pedals"] = decode_pedal_events(pedal_probabilities, duration,
+                pedal_onset_probabilities, pedal_offset_probabilities)
+            return result
         down = median_filter(pedal_probabilities[:, 0] >= 0.5, size=3, mode="nearest")
         changes = np.diff(np.pad(down.astype(np.int8), (1, 1)))
         result["pedals"] = [{"start": round(first * hop_seconds, 3),

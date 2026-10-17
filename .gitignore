@@ -11,4 +11,6 @@ assets/downloads/
 assets/fluidsynth/*.dll
 assets/fluidsynth/*.exe
 assets/piano/*.sf2
+assets/bytedance/*.pth
+assets/bytedance/*.part
 extrasave/

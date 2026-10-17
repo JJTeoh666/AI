@@ -13,9 +13,9 @@ from .data import MaestroWindows, collate_windows, load_records
 from .calibration import Calibration
 from .inference import get_device, load_model, predict_probabilities
 from .thresholds import requested_grid, Thresholds
-from .midi import read_notes
+from .midi import read_notes, read_performance, extend_sustain_notes
 from .model import (HOP_LENGTH, SAMPLE_RATE, LOW_NOTE, N_NOTES, model_config,
-                    default_selection_metric, checkpoint_format_version, FOUR_SCORE_ARCHITECTURES)
+                    default_selection_metric, checkpoint_format_version, AVGF_ARCHITECTURES, FIVE_SCORE_ARCHITECTURES)
 from .training import save_checkpoint, score
 from .avgf import avgf_accumulators, event_targets
 
@@ -33,8 +33,10 @@ def evaluate(args):
     config = saved.get("training_config", {})
     avgf_options = {"temperature": config.get("threshold_temperature", 0.1),
                     "regularization": config.get("threshold_regularization", 0.05)}
-    if metric == "avgf_loss" and model.architecture not in FOUR_SCORE_ARCHITECTURES:
-        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
+    if metric == "avgf_loss" and model.architecture not in AVGF_ARCHITECTURES:
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10, V10.1, V11, V11.1 or V12 model.")
+    target_options = ({"note_duration": "sustain_extended", "pedal_events": True}
+                      if model.architecture in FIVE_SCORE_ARCHITECTURES else {})
     minimum = args.min_note_seconds if args.min_note_seconds is not None else model.min_note_seconds
     if args.full_recordings:
         root = Path(args.data)
@@ -46,7 +48,11 @@ def evaluate(args):
         for index, record in enumerate(records, 1):
             print(f"Evaluating recording {index}/{len(records)}: {record['audio_filename']}", flush=True)
             duration, probabilities = predict_probabilities(root / record["audio_filename"], model, device)
-            reference = [asdict(note) for note in read_notes(root / record["midi_filename"])
+            notes = read_notes(root / record["midi_filename"])
+            if model.architecture in FIVE_SCORE_ARCHITECTURES:
+                notes, pedals = read_performance(root / record["midi_filename"])
+                notes = extend_sustain_notes(notes, pedals)
+            reference = [asdict(note) for note in notes
                          if LOW_NOTE <= note.pitch < LOW_NOTE + N_NOTES and note.start < duration]
             for note in reference:
                 note["end"] = min(note["end"], duration)
@@ -64,7 +70,7 @@ def evaluate(args):
                   "recordings": len(records), "mode": "full_recordings"}
     else:
         data = MaestroWindows(args.data, args.split, seconds=args.seconds, max_files=args.max_files,
-                              windows_per_file=args.windows_per_file, multi_target=True)
+                              windows_per_file=args.windows_per_file, multi_target=True, **target_options)
         loader = DataLoader(data, batch_size=args.batch_size, num_workers=args.workers, collate_fn=collate_windows)
         result = {**score(model, loader, device, selection_metric=metric,
                          min_note_seconds=minimum, threshold_configs=grid,
@@ -76,6 +82,8 @@ def evaluate(args):
                   offset_tolerance="max(0.05 seconds, 20% of reference duration)")
     if hasattr(model, "model_version"):
         result["model_version"] = model.model_version
+    if model.architecture in FIVE_SCORE_ARCHITECTURES:
+        result["note_duration"] = "sustain_extended"
     chosen = Thresholds(**result["thresholds"])
     if chosen.pitch_dependent:
         result["register_thresholds"] = chosen.registers()
@@ -83,6 +91,8 @@ def evaluate(args):
         payload = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
         if hasattr(model, "model_version"):
             payload["model_version"] = model.model_version
+        if model.architecture in FIVE_SCORE_ARCHITECTURES:
+            payload.update(note_duration="sustain_extended", avgf_betas=list(model.threshold_module.betas))
         payload.update(format_version=4, threshold=result["threshold"], thresholds=result["thresholds"], min_note_seconds=minimum,
                        calibration={"split": args.split, "metric": metric, "mode": result["mode"],
                                     "threshold_curve": result["threshold_curve"]})
@@ -112,9 +122,12 @@ def evaluate(args):
         pitch_output = Path(pitch_output)
         pitch_output.parent.mkdir(parents=True, exist_ok=True)
         with pitch_output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=("pitch", "name", "reference_count", "predicted_count",
+            fields = ["pitch", "name", "reference_count", "predicted_count",
                 "tp", "fp", "fn", "precision", "recall", "f0", "f1", "f2", "f3", "f03", "f0123",
-                "in_macro_f1", "in_macro_f03", "in_macro_f0123"))
+                "in_macro_f1", "in_macro_f03", "in_macro_f0123"]
+            if result["per_pitch_notes"] and "f12345" in result["per_pitch_notes"][0]:
+                fields.extend(("f4", "f5", "f12345", "in_macro_f12345"))
+            writer = csv.DictWriter(handle, fieldnames=fields)
             writer.writeheader()
             writer.writerows(result["per_pitch_notes"])
         print(f"Per-pitch note report: {pitch_output}", flush=True)

@@ -1,0 +1,35 @@
+{
+  "model_version": "11",
+  "architecture": "onsets-stft-fan-sustain-recurrent",
+  "format_version": 13,
+  "parameters": 10256830,
+  "sample_rate": 16000,
+  "short_fft": 2048,
+  "fan_window": 8192,
+  "fan_context_seconds": 0.512,
+  "hop_seconds": 0.02,
+  "gru_layers": 4,
+  "four_second_frames": 201,
+  "outputs": [
+    "frame",
+    "onset",
+    "offset",
+    "velocity",
+    "pedal",
+    "pedal_onset",
+    "pedal_offset"
+  ],
+  "note_duration": "sustain_extended",
+  "avgf_betas": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "v11_checks": 31,
+  "additional_regression_checks": 41,
+  "success": true,
+  "cuda_available": true,
+  "full_training": "not_started"
+}

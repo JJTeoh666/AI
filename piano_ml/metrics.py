@@ -125,7 +125,7 @@ class PreparedNoteMatcher:
         return counts
 
 
-def pitch_note_report(counts: np.ndarray, low_note: int = 21) -> dict:
+def pitch_note_report(counts: np.ndarray, low_note: int = 21, include_f12345: bool = False) -> dict:
     """Average per-key F scores after accumulating counts over all validation clips."""
     rows = []
     for column, (tp, fp, fn) in enumerate(counts):
@@ -139,9 +139,18 @@ def pitch_note_report(counts: np.ndarray, low_note: int = 21) -> dict:
                      "f0123": sum(scores[f"note_f{beta}"] for beta in range(4)) / 4,
                      "in_macro_f1": tp + fn > 0, "in_macro_f03": tp + fn > 0,
                      "in_macro_f0123": tp + fn > 0})
+        if include_f12345:
+            numerator, denominator = 26 * tp, 26 * tp + fp + 25 * fn
+            f5 = numerator / denominator if denominator else 0.0
+            rows[-1].update(f4=scores["note_f4"], f5=f5,
+                            f12345=(sum(scores[f"note_f{beta}"] for beta in range(1, 5)) + f5) / 5,
+                            in_macro_f12345=tp + fn > 0)
     supported = [row for row in rows if row["in_macro_f1"]]
+    keys = ("f0", "f1", "f2", "f3", "f03", "f0123")
+    if include_f12345:
+        keys += ("f4", "f5", "f12345")
     averages = {f"note_macro_{key}": sum(row[key] for row in supported) / len(supported)
-                if supported else 0.0 for key in ("f0", "f1", "f2", "f3", "f03", "f0123")}
+                if supported else 0.0 for key in keys}
     return {**averages,
             "note_macro_pitch_count": len(supported), "per_pitch_notes": rows}
 

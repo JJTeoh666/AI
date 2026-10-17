@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-16",
+  "model_version": "12",
+  "architecture": "onsets-dual-stft-split-fan-sustain",
+  "format_version": 15,
+  "trainable_parameters": 9991654,
+  "configuration": {
+    "sample_rate": 16000,
+    "short_fft": 2048,
+    "long_fft": 8192,
+    "hop_samples": 320,
+    "four_second_frames": 201,
+    "feature_width": 384,
+    "hidden_size_per_direction": 256,
+    "gru_layers": 2,
+    "residual_blocks": 1,
+    "event_width": 768,
+    "event_fan_layers": 2,
+    "note_duration": "sustain_extended",
+    "avgf_betas": [1, 2, 3, 4, 5]
+  },
+  "parameters": {
+    "short_fft_cnn": 706944,
+    "long_fft_cnn": 2476416,
+    "fusion": 296064,
+    "gru_and_normalization": 2169856,
+    "frame_residual_cnn": 3150336,
+    "frame_velocity_heads": 90288,
+    "fan_layers_and_normalization": 964096,
+    "event_heads": 137651,
+    "thresholds": 3
+  },
+  "verification": {
+    "v12_model": {"passed": 5, "skipped": 1, "seconds": 4.27},
+    "v12_pipeline_and_checkpoint_io": {"passed": 10, "seconds": 33.073},
+    "regression": {
+      "passed": 64,
+      "skipped": 1,
+      "seconds": 48.371,
+      "suites": ["test_v111_model", "test_v111_pipeline", "test_v11_pipeline", "test_v11_avgf", "test_v11_sustain", "test_v11_playback", "test_loss_reporting", "test_app_overlap", "test_inference_overlap"]
+    },
+    "readme_commands": {"passed": 1, "all_existing_commands_preserved": true},
+    "total_unique_passed": 80,
+    "total_unique_skipped": 2,
+    "cuda_skip_reason": "GPU was in use; verification used CPU. V12 default four-second forward/backward and AdamW passed on CPU. Optional V12 GPU test uses PIANO_V12_GPU_TEST=1."
+  },
+  "covered_behaviors": [
+    "Exact default parameter count, module budget and finite nonzero gradients for all parameters",
+    "Both GRU directions, both FFT encoders, residual branch, FAN layers and all seven heads",
+    "Direct short-CNN skip and independent routing of frame/velocity versus event/pedal heads",
+    "Centered spectral amplitude/context checks, float32 FFT under CPU autocast, short/odd/four-second alignment",
+    "Configuration/state roundtrip and compatible initialization; earlier architectures/dimension mismatches rejected",
+    "Best/latest checkpoints, resume, version metadata, sustained targets and loss components",
+    "Window and full-performance evaluation, five-beta AvgF and per-pitch CSV",
+    "Minimum AvgF best selection, exact 15-failure LR reduction and requested epoch completion",
+    "All overlap modes and context settings, cancellation and app preference/version display",
+    "Sustain decoding, repeated strikes and playback without double extension",
+    "Bounded Windows file-lock retry preserves the old checkpoint and fails on persistent or unrelated errors",
+    "Earlier model parameter counts, loading, scheduler policies and README commands"
+  ],
+  "limits": {
+    "long_training_launched": false,
+    "existing_checkpoints_modified": false,
+    "user_gpu_work_interrupted": false,
+    "recognition_quality_improvement_measured": false,
+    "epoch_speedup_measured": false
+  }
+}

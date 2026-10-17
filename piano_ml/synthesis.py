@@ -61,10 +61,12 @@ def render_result_wav(result: dict, output: str | Path, sample_rate: int | None 
             raise ValueError("Invalid sustain pedal timing.")
     if sampled:
         return render_sampled_wav(result, output, sample_rate, progress, cancel)
-    # Extend sounding durations at key release without changing the displayed score.
+    # V11 note ends already describe sustained sound. Older results describe key
+    # releases and still need the pedal extension before basic-tone synthesis.
+    extend_pedals = result.get("note_duration") != "sustain_extended"
     next_start = {}
     for note in reversed(notes):
-        for pedal in pedals:
+        for pedal in pedals if extend_pedals else ():
             if pedal["start"] <= note["end"] < pedal["end"]:
                 note["end"] = min(duration, pedal["end"])
         note["end"] = min(note["end"], next_start.get(note["pitch"], duration))

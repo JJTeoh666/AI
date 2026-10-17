@@ -1,0 +1,566 @@
+{
+  "source": "https://magenta.withgoogle.com/datasets/maestro",
+  "version": "3.0.0",
+  "date": "2026-10-17",
+  "status": "verified",
+  "mode": "append official training pairs; no pitch focus",
+  "requested_additional_bytes": 2000000000,
+  "added_bytes": 1997539801,
+  "estimated_compressed_transfer_bytes": 1701851574,
+  "seed": 20261017,
+  "new_train_recordings": 35,
+  "new_audio_hours": 3.092036125548,
+  "before_counts": {
+    "train": 60,
+    "validation": 16,
+    "test": 4
+  },
+  "after_counts": {
+    "train": 95,
+    "validation": 16,
+    "test": 4
+  },
+  "before_hours": {
+    "train": 4.374697853805305,
+    "validation": 1.4711270678278612,
+    "test": 0.17278491225402778
+  },
+  "after_hours": {
+    "train": 7.466733979353306,
+    "validation": 1.4711270678278612,
+    "test": 0.17278491225402778
+  },
+  "active_pair_bytes_after": {
+    "train": 4814203172,
+    "validation": 944677530,
+    "test": 110840825
+  },
+  "verified_crc32_files": 70,
+  "all_new_pairs_in_training_loader": true,
+  "all_new_pairs_four_second_seven_head_targets": true,
+  "metadata_unchanged": true,
+  "exclusions_unchanged": true,
+  "old_file_sizes_unchanged": true,
+  "validation_and_test_records_unchanged": true,
+  "sha256": {
+    "maestro-v3.0.0.csv": "cb88a64a12971a995dd41852aa3a33879501cf70d01b9a6feb637f4ad8d8ddff",
+    "training-exclusions.json": "d05645960492033d5979f6998876c46c9bec9927833252da65be2a75865e0580"
+  },
+  "new_note_events": 115422,
+  "new_pedal_intervals": 7871,
+  "new_pitch_counts": {
+    "21": 1,
+    "22": 4,
+    "23": 2,
+    "24": 15,
+    "25": 31,
+    "26": 46,
+    "27": 50,
+    "28": 49,
+    "29": 115,
+    "30": 137,
+    "31": 256,
+    "32": 314,
+    "33": 578,
+    "34": 463,
+    "35": 424,
+    "36": 523,
+    "37": 630,
+    "38": 724,
+    "39": 499,
+    "40": 848,
+    "41": 875,
+    "42": 839,
+    "43": 1035,
+    "44": 1047,
+    "45": 1683,
+    "46": 1279,
+    "47": 1318,
+    "48": 1581,
+    "49": 1660,
+    "50": 2089,
+    "51": 1405,
+    "52": 2382,
+    "53": 2001,
+    "54": 2162,
+    "55": 2732,
+    "56": 2240,
+    "57": 3359,
+    "58": 2758,
+    "59": 2619,
+    "60": 2769,
+    "61": 3176,
+    "62": 3583,
+    "63": 2751,
+    "64": 3445,
+    "65": 3216,
+    "66": 2634,
+    "67": 3259,
+    "68": 2589,
+    "69": 3542,
+    "70": 2830,
+    "71": 2695,
+    "72": 2906,
+    "73": 2881,
+    "74": 3143,
+    "75": 2413,
+    "76": 2933,
+    "77": 2771,
+    "78": 1795,
+    "79": 2410,
+    "80": 1741,
+    "81": 2037,
+    "82": 1631,
+    "83": 1485,
+    "84": 1409,
+    "85": 1103,
+    "86": 1238,
+    "87": 743,
+    "88": 1036,
+    "89": 807,
+    "90": 444,
+    "91": 602,
+    "92": 417,
+    "93": 502,
+    "94": 376,
+    "95": 290,
+    "96": 263,
+    "97": 191,
+    "98": 261,
+    "99": 91,
+    "100": 107,
+    "101": 86,
+    "102": 14,
+    "103": 9,
+    "104": 9,
+    "105": 7,
+    "106": 7,
+    "107": 2
+  },
+  "training_windows_per_epoch_at_32": 3040,
+  "training_batches_at_batch_size_4": 760,
+  "disk_free_bytes_after": 83479552000,
+  "verified_files": [
+    {
+      "path": "2014/MIDI-UNPROCESSED_04-05_R1_2014_MID--AUDIO_05_R1_2014_wav--6.wav",
+      "bytes": 42975264,
+      "crc32": "5ef5d510",
+      "kind": "audio"
+    },
+    {
+      "path": "2014/MIDI-UNPROCESSED_04-05_R1_2014_MID--AUDIO_05_R1_2014_wav--6.midi",
+      "bytes": 13460,
+      "crc32": "05df28da",
+      "kind": "midi"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_8_13_Group__MID--AUDIO_08_R2_2013_wav--3.wav",
+      "bytes": 68897884,
+      "crc32": "427e8db3",
+      "kind": "audio"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_8_13_Group__MID--AUDIO_08_R2_2013_wav--3.midi",
+      "bytes": 57338,
+      "crc32": "bf9dfd1d",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_11_R1_2008_01-04_ORIG_MID--AUDIO_11_R1_2008_wav--3.wav",
+      "bytes": 57036128,
+      "crc32": "a1f2d710",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_11_R1_2008_01-04_ORIG_MID--AUDIO_11_R1_2008_wav--3.midi",
+      "bytes": 35555,
+      "crc32": "d2809dcd",
+      "kind": "midi"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_7_13_Group__MID--AUDIO_17_R1_2013_wav--1.wav",
+      "bytes": 25216312,
+      "crc32": "91984858",
+      "kind": "audio"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_7_13_Group__MID--AUDIO_17_R1_2013_wav--1.midi",
+      "bytes": 13380,
+      "crc32": "d8c96374",
+      "kind": "midi"
+    },
+    {
+      "path": "2006/MIDI-Unprocessed_07_R2_2006_01_ORIG_MID--AUDIO_07_R2_2006_02_Track02_wav.wav",
+      "bytes": 74095484,
+      "crc32": "e7938c6c",
+      "kind": "audio"
+    },
+    {
+      "path": "2006/MIDI-Unprocessed_07_R2_2006_01_ORIG_MID--AUDIO_07_R2_2006_02_Track02_wav.midi",
+      "bytes": 44108,
+      "crc32": "e31999d9",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_15_R1_2011_MID--AUDIO_R1-D6_10_Track10_wav.wav",
+      "bytes": 58331500,
+      "crc32": "2b2fa051",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_15_R1_2011_MID--AUDIO_R1-D6_10_Track10_wav.midi",
+      "bytes": 42444,
+      "crc32": "16d306d5",
+      "kind": "midi"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_7_13_Group__MID--AUDIO_18_R1_2013_wav--5.wav",
+      "bytes": 44315648,
+      "crc32": "3a3f86e5",
+      "kind": "audio"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_7_13_Group__MID--AUDIO_18_R1_2013_wav--5.midi",
+      "bytes": 32118,
+      "crc32": "198e4d0e",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_07_R2_2008_01-05_ORIG_MID--AUDIO_07_R2_2008_wav--1.wav",
+      "bytes": 66354836,
+      "crc32": "b684a971",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_07_R2_2008_01-05_ORIG_MID--AUDIO_07_R2_2008_wav--1.midi",
+      "bytes": 32663,
+      "crc32": "bbbe0ffb",
+      "kind": "midi"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_057_PIANO057_MID--AUDIO-split_07-07-17_Piano-e_1-07_wav--1.wav",
+      "bytes": 43066788,
+      "crc32": "4ed27652",
+      "kind": "audio"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_057_PIANO057_MID--AUDIO-split_07-07-17_Piano-e_1-07_wav--1.midi",
+      "bytes": 15815,
+      "crc32": "d2685505",
+      "kind": "midi"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_055_PIANO055_MID--AUDIO-split_07-07-17_Piano-e_1-04_wav--1.wav",
+      "bytes": 66834104,
+      "crc32": "1ea50a70",
+      "kind": "audio"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_055_PIANO055_MID--AUDIO-split_07-07-17_Piano-e_1-04_wav--1.midi",
+      "bytes": 30490,
+      "crc32": "2e2266a6",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_09_R1_2004_05_ORIG_MID--AUDIO_09_R1_2004_07_Track07_wav.wav",
+      "bytes": 27516156,
+      "crc32": "bf7e3818",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_09_R1_2004_05_ORIG_MID--AUDIO_09_R1_2004_07_Track07_wav.midi",
+      "bytes": 17375,
+      "crc32": "9947e09f",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_16_R1_2008_01-04_ORIG_MID--AUDIO_16_R1_2008_wav--4.wav",
+      "bytes": 49671248,
+      "crc32": "5aa0dac9",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_16_R1_2008_01-04_ORIG_MID--AUDIO_16_R1_2008_wav--4.midi",
+      "bytes": 46184,
+      "crc32": "b978eee1",
+      "kind": "midi"
+    },
+    {
+      "path": "2014/MIDI-UNPROCESSED_11-13_R1_2014_MID--AUDIO_11_R1_2014_wav--2.wav",
+      "bytes": 35701596,
+      "crc32": "dfae3387",
+      "kind": "audio"
+    },
+    {
+      "path": "2014/MIDI-UNPROCESSED_11-13_R1_2014_MID--AUDIO_11_R1_2014_wav--2.midi",
+      "bytes": 28750,
+      "crc32": "7806db59",
+      "kind": "midi"
+    },
+    {
+      "path": "2015/MIDI-Unprocessed_R1_D2-13-20_mid--AUDIO-from_mp3_17_R1_2015_wav--4.wav",
+      "bytes": 73668360,
+      "crc32": "0bd91038",
+      "kind": "audio"
+    },
+    {
+      "path": "2015/MIDI-Unprocessed_R1_D2-13-20_mid--AUDIO-from_mp3_17_R1_2015_wav--4.midi",
+      "bytes": 55901,
+      "crc32": "1ef9d67e",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_20_R1_2011_MID--AUDIO_R1-D8_03_Track03_wav.wav",
+      "bytes": 43173380,
+      "crc32": "9a46e662",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_20_R1_2011_MID--AUDIO_R1-D8_03_Track03_wav.midi",
+      "bytes": 40357,
+      "crc32": "b7d04cb2",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_10_R2_2008_01-05_ORIG_MID--AUDIO_10_R2_2008_wav--3.wav",
+      "bytes": 94196468,
+      "crc32": "b243bdb3",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_10_R2_2008_01-05_ORIG_MID--AUDIO_10_R2_2008_wav--3.midi",
+      "bytes": 78812,
+      "crc32": "248108c8",
+      "kind": "midi"
+    },
+    {
+      "path": "2009/MIDI-Unprocessed_09_R2_2009_01_ORIG_MID--AUDIO_09_R2_2009_09_R2_2009_01_WAV.wav",
+      "bytes": 81984404,
+      "crc32": "e1e60aab",
+      "kind": "audio"
+    },
+    {
+      "path": "2009/MIDI-Unprocessed_09_R2_2009_01_ORIG_MID--AUDIO_09_R2_2009_09_R2_2009_01_WAV.midi",
+      "bytes": 53806,
+      "crc32": "e7e33c4a",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_16_R1_2008_01-04_ORIG_MID--AUDIO_16_R1_2008_wav--2.wav",
+      "bytes": 58614492,
+      "crc32": "5891305d",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_16_R1_2008_01-04_ORIG_MID--AUDIO_16_R1_2008_wav--2.midi",
+      "bytes": 35884,
+      "crc32": "ed5d49d2",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_21_R1_2004_02_ORIG_MID--AUDIO_21_R1_2004_02_Track02_wav.wav",
+      "bytes": 87682844,
+      "crc32": "81bad596",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_21_R1_2004_02_ORIG_MID--AUDIO_21_R1_2004_02_Track02_wav.midi",
+      "bytes": 45354,
+      "crc32": "e88b1733",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_06_R2_2008_01-05_ORIG_MID--AUDIO_06_R2_2008_wav--4.wav",
+      "bytes": 50763664,
+      "crc32": "7a8f8016",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_06_R2_2008_01-05_ORIG_MID--AUDIO_06_R2_2008_wav--4.midi",
+      "bytes": 26808,
+      "crc32": "226480bd",
+      "kind": "midi"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_045_PIANO045_MID--AUDIO-split_07-06-17_Piano-e_2-01_wav--4.wav",
+      "bytes": 75966592,
+      "crc32": "ead5f35b",
+      "kind": "audio"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_045_PIANO045_MID--AUDIO-split_07-06-17_Piano-e_2-01_wav--4.midi",
+      "bytes": 51689,
+      "crc32": "2b2e6eea",
+      "kind": "midi"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_6_13_Group__MID--AUDIO_05_R1_2013_wav--1.wav",
+      "bytes": 62416228,
+      "crc32": "9aabec9b",
+      "kind": "audio"
+    },
+    {
+      "path": "2013/ORIG-MIDI_02_7_6_13_Group__MID--AUDIO_05_R1_2013_wav--1.midi",
+      "bytes": 27736,
+      "crc32": "ed7a7f28",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_17_R2_2004_01_ORIG_MID--AUDIO_17_R2_2004_02_Track02_wav.wav",
+      "bytes": 73717988,
+      "crc32": "8e1fc079",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_17_R2_2004_01_ORIG_MID--AUDIO_17_R2_2004_02_Track02_wav.midi",
+      "bytes": 45927,
+      "crc32": "156ae703",
+      "kind": "midi"
+    },
+    {
+      "path": "2009/MIDI-Unprocessed_14_R1_2009_01-05_ORIG_MID--AUDIO_14_R1_2009_14_R1_2009_03_WAV.wav",
+      "bytes": 23589660,
+      "crc32": "0c9651c9",
+      "kind": "audio"
+    },
+    {
+      "path": "2009/MIDI-Unprocessed_14_R1_2009_01-05_ORIG_MID--AUDIO_14_R1_2009_14_R1_2009_03_WAV.midi",
+      "bytes": 13220,
+      "crc32": "faa6e177",
+      "kind": "midi"
+    },
+    {
+      "path": "2006/MIDI-Unprocessed_01_R1_2006_01-09_ORIG_MID--AUDIO_01_R1_2006_05_Track05_wav.wav",
+      "bytes": 76709340,
+      "crc32": "e494cb4f",
+      "kind": "audio"
+    },
+    {
+      "path": "2006/MIDI-Unprocessed_01_R1_2006_01-09_ORIG_MID--AUDIO_01_R1_2006_05_Track05_wav.midi",
+      "bytes": 52636,
+      "crc32": "21c96211",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_16_R1_2011_MID--AUDIO_R1-D6_12_Track12_wav.wav",
+      "bytes": 59783372,
+      "crc32": "8b699384",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_16_R1_2011_MID--AUDIO_R1-D6_12_Track12_wav.midi",
+      "bytes": 22721,
+      "crc32": "1bf5cc56",
+      "kind": "midi"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_056_PIANO056_MID--AUDIO-split_07-07-17_Piano-e_1-05_wav--3.wav",
+      "bytes": 96600168,
+      "crc32": "ab8c3288",
+      "kind": "audio"
+    },
+    {
+      "path": "2017/MIDI-Unprocessed_056_PIANO056_MID--AUDIO-split_07-07-17_Piano-e_1-05_wav--3.midi",
+      "bytes": 80981,
+      "crc32": "5478f388",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_03_R3_2011_MID--AUDIO_R3-D1_06_Track06_wav.wav",
+      "bytes": 45475640,
+      "crc32": "b89f48e5",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_03_R3_2011_MID--AUDIO_R3-D1_06_Track06_wav.midi",
+      "bytes": 32491,
+      "crc32": "1d323bfe",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_SMF_13_01_2004_01-05_ORIG_MID--AUDIO_13_R1_2004_09_Track09_wav.wav",
+      "bytes": 61440516,
+      "crc32": "b11774e8",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_SMF_13_01_2004_01-05_ORIG_MID--AUDIO_13_R1_2004_09_Track09_wav.midi",
+      "bytes": 24445,
+      "crc32": "9d33fa9d",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_03_R3_2011_MID--AUDIO_R3-D1_02_Track02_wav.wav",
+      "bytes": 42685976,
+      "crc32": "7b6f248a",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_03_R3_2011_MID--AUDIO_R3-D1_02_Track02_wav.midi",
+      "bytes": 24254,
+      "crc32": "ad236a04",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_14_R2_2004_01_ORIG_MID--AUDIO_14_R2_2004_04_Track04_wav.wav",
+      "bytes": 80803604,
+      "crc32": "87e4e636",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_14_R2_2004_01_ORIG_MID--AUDIO_14_R2_2004_04_Track04_wav.midi",
+      "bytes": 63989,
+      "crc32": "83665ff4",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_05_R1_2011_MID--AUDIO_R1-D2_09_Track09_wav.wav",
+      "bytes": 34025212,
+      "crc32": "659109df",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_05_R1_2011_MID--AUDIO_R1-D2_09_Track09_wav.midi",
+      "bytes": 9247,
+      "crc32": "977d13db",
+      "kind": "midi"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_15_R2_2004_01_ORIG_MID--AUDIO_15_R2_2004_03_Track03_wav.wav",
+      "bytes": 62029436,
+      "crc32": "94258c94",
+      "kind": "audio"
+    },
+    {
+      "path": "2004/MIDI-Unprocessed_XP_15_R2_2004_01_ORIG_MID--AUDIO_15_R2_2004_03_Track03_wav.midi",
+      "bytes": 48651,
+      "crc32": "37d5bc03",
+      "kind": "midi"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_10_R1_2008_01-04_ORIG_MID--AUDIO_10_R1_2008_wav--1.wav",
+      "bytes": 34695920,
+      "crc32": "71aa75de",
+      "kind": "audio"
+    },
+    {
+      "path": "2008/MIDI-Unprocessed_10_R1_2008_01-04_ORIG_MID--AUDIO_10_R1_2008_wav--1.midi",
+      "bytes": 14574,
+      "crc32": "0e762425",
+      "kind": "midi"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_12_R3_2011_MID--AUDIO_R3-D4_08_Track08_wav.wav",
+      "bytes": 16238252,
+      "crc32": "afe6212a",
+      "kind": "audio"
+    },
+    {
+      "path": "2011/MIDI-Unprocessed_12_R3_2011_MID--AUDIO_R3-D4_08_Track08_wav.midi",
+      "bytes": 6174,
+      "crc32": "766de584",
+      "kind": "midi"
+    }
+  ],
+  "manifest": "diagnostics/additional-download-plan-v121-2026-10-17.json"
+}

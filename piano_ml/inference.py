@@ -11,7 +11,7 @@ import torch
 
 from .data import read_wav_window
 from .decode import decode, decode_outputs
-from .model import HOP_LENGTH, SAMPLE_RATE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE, build_model, model_config
+from .model import HOP_LENGTH, SAMPLE_RATE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE, V11_ARCHITECTURE, V111_ARCHITECTURE, V12_ARCHITECTURE, V121_ARCHITECTURE, FIVE_SCORE_ARCHITECTURES, build_model, model_config
 from .thresholds import saved_thresholds, Thresholds
 
 
@@ -49,6 +49,14 @@ def load_model(checkpoint: str | Path, device: torch.device) -> torch.nn.Module:
         model.model_version = str(saved.get("model_version", "10"))
     elif model.architecture == V101_ARCHITECTURE:
         model.model_version = str(saved.get("model_version", "10.1"))
+    elif model.architecture == V11_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "11"))
+    elif model.architecture == V111_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "11.1"))
+    elif model.architecture == V12_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "12"))
+    elif model.architecture == V121_ARCHITECTURE:
+        model.model_version = str(saved.get("model_version", "12.1"))
     model.decoding_thresholds = model.learned_thresholds() if hasattr(model, "learned_thresholds") else saved_thresholds(saved)
     model.detection_threshold = model.decoding_thresholds.summary()["frame"]
     model.min_note_seconds = float(saved.get("min_note_seconds", 0.04 if model.architecture != "frame" else 0.08))
@@ -90,6 +98,9 @@ def transcribe_audio(audio: str | Path, checkpoint: str | Path, threshold: float
             "thresholds": values.to_dict(),
             "inference_config": {"chunk_seconds": CHUNK_SECONDS, "context_seconds": context,
                                  "overlap_seconds": round(2 * context, 6), "overlap_blend": overlap_blend},
+            **({"note_duration": "sustain_extended", "avgf_betas": list(model.threshold_module.betas),
+                "pedal_decoder": {"frame": .5, "onset": .3, "offset": .2}}
+               if model.architecture in FIVE_SCORE_ARCHITECTURES else {}),
             **({"register_thresholds": values.registers()} if values.pitch_dependent else {}),
             "min_note_seconds": minimum, **events}
 

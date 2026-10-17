@@ -131,9 +131,9 @@ def draw_prediction(figure: Figure, result: dict,
     figure.set_facecolor("#ffffff")
     audio_name = Path(result.get("audio") or "Piano recording").name
     model_name = Path(result.get("model") or "Saved result").name
-    if result.get("engine") == "basic-pitch":
+    if result.get("engine") == "bytedance":
         thresholds = result.get("thresholds", {})
-        threshold_label = f"frame {thresholds.get('frame', .3):.2f} / onset {thresholds.get('onset', .5):.2f}"
+        threshold_label = f"frame {thresholds.get('frame', .1):.2f} / onset {thresholds.get('onset', .3):.2f} / offset {thresholds.get('offset', .3):.2f}"
     else:
         threshold_label = f"threshold {result.get('threshold', 0.5):.2f}"
     figure.suptitle(f"{audio_name}  |  {model_name}  |  {threshold_label}",

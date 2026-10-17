@@ -1,20 +1,24 @@
-"""Validation counterpart of V8.1/V9/V10/V10.1's smooth threshold AvgF objective."""
+"""Validation counterpart of the model's smooth per-pitch AvgF objective."""
 
 import math
 import numpy as np
 
 from .thresholds import HEADS
-from .model import FOUR_SCORE_ARCHITECTURES
+from .model import AVGF_ARCHITECTURES
 
 
 class AvgFLoss:
     """Accumulate soft counts over all validation frames before scoring keys."""
 
-    def __init__(self, thresholds, prior, temperature=0.1, regularization=0.05):
+    def __init__(self, thresholds, prior, temperature=0.1, regularization=0.05,
+                 betas=(0, 1, 2, 3)):
         if thresholds.pitch_dependent:
             raise ValueError("AvgF loss requires three global thresholds.")
         if not math.isfinite(temperature) or temperature <= 0 or not math.isfinite(regularization) or regularization < 0:
             raise ValueError("AvgF temperature must be positive and regularization nonnegative.")
+        self.betas = tuple(betas)
+        if not self.betas or any(not math.isfinite(beta) or beta < 0 for beta in self.betas):
+            raise ValueError("AvgF betas must be nonempty, finite and nonnegative.")
         self.thresholds = thresholds
         self.prior = np.asarray(prior, dtype=np.float64)
         self.temperature, self.regularization = temperature, regularization
@@ -45,21 +49,23 @@ class AvgFLoss:
             supported = positives > 0
             if supported.any():
                 scores = np.stack([(1 + beta ** 2) * matched / np.maximum(predicted + beta ** 2 * positives, 1e-6)
-                                   for beta in (0, 1, 2, 3)]).mean(axis=0)
+                                   for beta in self.betas]).mean(axis=0)
                 losses.append(float((1 - scores[supported]).mean()))
             if (~supported).any():
                 losses.append(float((predicted[~supported] / count).mean()))
         data_loss = float(np.mean(losses))
         values = np.asarray(list(self.thresholds.summary().values()))
         prior_loss = float(self.regularization * np.mean((values - self.prior) ** 2))
-        return {"avgf_loss": data_loss + prior_loss, "avgf_data_loss": data_loss, "avgf_prior_loss": prior_loss}
+        return {"avgf_loss": data_loss + prior_loss, "avgf_data_loss": data_loss,
+                "avgf_prior_loss": prior_loss, "avgf_betas": list(self.betas)}
 
 
 def avgf_accumulators(model, grid, temperature=0.1, regularization=0.05):
-    if getattr(model, "architecture", None) not in FOUR_SCORE_ARCHITECTURES:
+    if getattr(model, "architecture", None) not in AVGF_ARCHITECTURES:
         return {}
     prior = model.threshold_module.prior.detach().cpu().numpy()
-    return {values: AvgFLoss(values, prior, temperature, regularization) for values in grid}
+    return {values: AvgFLoss(values, prior, temperature, regularization,
+                            betas=model.threshold_module.betas) for values in grid}
 
 
 def event_targets(frame, notes, duration, frames_per_second=50):

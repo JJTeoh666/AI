@@ -23,6 +23,48 @@ class Pedal:
     end: float
 
 
+def merge_pedal_intervals(pedals: list[Pedal]) -> list[Pedal]:
+    """Return the union of sustain intervals without changing the inputs."""
+    merged: list[Pedal] = []
+    for pedal in sorted(pedals, key=lambda item: (item.start, item.end)):
+        if pedal.end <= pedal.start:
+            continue
+        if merged and pedal.start <= merged[-1].end:
+            previous = merged[-1]
+            merged[-1] = Pedal(previous.start, max(previous.end, pedal.end))
+        else:
+            merged.append(Pedal(pedal.start, pedal.end))
+    return merged
+
+
+def extend_sustain_notes(notes: list[Note], pedals: list[Pedal]) -> list[Note]:
+    """Extend key releases held by sustain, ending at the next same-pitch strike.
+
+    Transform the complete performance before slicing training windows, so a
+    note or pedal that starts before a window still supplies its held frames.
+    Original note and pedal objects remain unchanged.
+    """
+    intervals = merge_pedal_intervals(pedals)
+    pedal_starts = [pedal.start for pedal in intervals]
+    pitch_starts: dict[int, list[float]] = defaultdict(list)
+    for note in notes:
+        pitch_starts[note.pitch].append(note.start)
+    for starts in pitch_starts.values():
+        starts.sort()
+    extended = []
+    for note in notes:
+        end = note.end
+        index = bisect_right(pedal_starts, end) - 1
+        if index >= 0 and end < intervals[index].end:
+            end = intervals[index].end
+        starts = pitch_starts[note.pitch]
+        next_index = bisect_right(starts, note.start)
+        if next_index < len(starts):
+            end = min(end, starts[next_index])
+        extended.append(Note(note.pitch, note.start, end, note.velocity))
+    return sorted(extended, key=lambda note: (note.start, note.pitch))
+
+
 def _vlq(data: bytes, offset: int) -> tuple[int, int]:
     value = 0
     for _ in range(4):

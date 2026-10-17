@@ -31,7 +31,7 @@ class V101ModelTest(unittest.TestCase):
 
     def test_default_budget_branch_inputs_four_second_alignment_and_all_gradients(self):
         model = STFTCQTPianoNet()
-        self.assertEqual(DEFAULT_ARCHITECTURE, V101_ARCHITECTURE)
+        self.assertEqual(model.architecture, V101_ARCHITECTURE)
         self.assertEqual(sum(p.numel() for p in model.parameters()), 3054988)
         self.assertEqual(sum(p.numel() for p in model.short_encoder.parameters()), 406104)
         self.assertEqual(sum(p.numel() for p in model.cqt_encoder.parameters()), 407112)
@@ -126,9 +126,9 @@ class V101PipelineTest(unittest.TestCase):
 
     def options(self, output, **changes):
         return v8.V8PipelineTest.options(self, output, **{
-            "architecture": "auto", "fourier_modes": None, "fourier_layers": None, **changes})
+            "architecture": V101_ARCHITECTURE, "fourier_modes": None, "fourier_layers": None, **changes})
 
-    def test_fresh_auto_default_save_load_resume_and_compatible_initialization(self):
+    def test_explicit_v101_save_load_resume_and_compatible_initialization(self):
         previous = Path.cwd()
         try:
             os.chdir(self.root)

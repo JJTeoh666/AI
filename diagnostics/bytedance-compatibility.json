@@ -1,0 +1,31 @@
+{
+  "python": "3.13.11",
+  "torch": "2.12.0.dev20260402+cu128",
+  "devices": {
+    "cpu": {
+      "notes": 20,
+      "pedals": 4,
+      "analysis_seconds": 3.0989937998820096
+    },
+    "cuda": {
+      "notes": 20,
+      "pedals": 4,
+      "analysis_seconds": 2.004054900025949
+    }
+  },
+  "reference": {
+    "all_head_max_abs_difference": {
+      "reg_onset_output": 1.4901161193847656e-07,
+      "reg_offset_output": 6.258487701416016e-07,
+      "frame_output": 1.6093254089355469e-06,
+      "velocity_output": 1.7881393432617188e-07,
+      "reg_pedal_onset_output": 1.1920928955078125e-07,
+      "reg_pedal_offset_output": 2.682209014892578e-07,
+      "pedal_frame_output": 5.364418029785156e-07
+    },
+    "absolute_tolerance": 1e-05,
+    "upstream_decoder_events_identical": true,
+    "note_events": 20,
+    "pedal_events": 4
+  }
+}

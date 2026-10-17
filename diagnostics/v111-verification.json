@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-15",
+  "model_version": "11.1",
+  "architecture": "onsets-dual-stft-sustain-recurrent",
+  "format_version": 14,
+  "trainable_parameters": 9929470,
+  "previous_v11_trainable_parameters": 10256830,
+  "short_fft": 2048,
+  "long_fft": 8192,
+  "hop_samples": 320,
+  "four_second_frames": 201,
+  "note_duration": "sustain_extended",
+  "avgf_betas": [1, 2, 3, 4, 5],
+  "fresh_lr_policy": {
+    "consecutive_bad_epochs": 15,
+    "pytorch_patience": 14,
+    "threshold": 0.000001,
+    "threshold_mode": "abs",
+    "factor": 0.5,
+    "min_lr": 0.000001
+  },
+  "verification": {
+    "new_model_tests": {"passed": 5, "seconds": 11.177, "includes_default_cuda_forward_backward_adamw": true},
+    "new_pipeline_tests": {"passed": 11, "seconds": 48.660},
+    "regression_tests": {
+      "executed": 54,
+      "passed": 53,
+      "skipped": 1,
+      "seconds": 19.445,
+      "skip_reason": "CUDA hidden for regression run to leave active user GPU training untouched; new model CUDA test passed separately.",
+      "suites": ["test_v11_model", "test_v11_pipeline", "test_v11_avgf", "test_v11_sustain", "test_v11_playback", "test_loss_reporting", "test_app_overlap", "test_inference_overlap"]
+    },
+    "readme_commands": {"passed": 1, "preserved_previous_commands": true},
+    "total_unique_passed": 70,
+    "total_unique_skipped": 1
+  },
+  "covered_behaviors": [
+    "Exact parameter budget and all finite nonzero parameter gradients",
+    "Short, odd and four-second inputs; all seven heads aligned",
+    "Spectral frequency, amplitude and centered-window checks",
+    "Float32 FFT under CUDA autocast",
+    "Best/latest/configuration roundtrip and deterministic resume",
+    "Sustain targets, five-beta AvgF, completed-epoch loss reporting",
+    "Requested training epochs complete with no early stopping",
+    "Exact 15 failures and absolute improvement tolerance in min/max modes",
+    "Explicit patience overrides after resume; omitted settings preserve saved policy",
+    "Legacy relative scheduler and changed-output policy compatibility",
+    "App checkpoint discovery and all three overlap modes, including cancellation",
+    "Preserved earlier architecture budgets, checkpoints and README commands"
+  ],
+  "limits": {
+    "long_training_launched": false,
+    "user_training_interrupted": false,
+    "existing_checkpoints_modified": false,
+    "recognition_improvement_measured": false,
+    "v111_epoch_speedup_measured": false,
+    "audit": "v111-training-audit.json"
+  }
+}

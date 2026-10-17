@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-17",
+  "model_version": "12.1",
+  "architecture": "onsets-dual-stft-parallel-fan-sustain",
+  "checkpoint_format": 16,
+  "trainable_parameters": 9976422,
+  "v12_trainable_parameters": 9991654,
+  "merge": "concatenate normalized BiGRU output with parallel residual-CNN output, then project before both output branches",
+  "configuration": {
+    "sample_rate": 16000,
+    "short_fft": 2048,
+    "long_fft": 8192,
+    "hop_samples": 320,
+    "four_second_frames": 201,
+    "feature_width": 384,
+    "hidden_size_per_direction": 256,
+    "gru_layers": 2,
+    "parallel_residual_blocks": 1,
+    "frame_residual_blocks": 1,
+    "event_width": 256,
+    "event_fan_layers": 2,
+    "post_fan_temporal_convolutions": 1,
+    "note_duration": "sustain_extended",
+    "avgf_betas": [1, 2, 3, 4, 5],
+    "lr_patience_consecutive_epochs": 15,
+    "early_stopping": false
+  },
+  "parameters": {
+    "short_fft_cnn": 706944,
+    "long_fft_cnn": 2476416,
+    "acoustic_fusion": 296064,
+    "gru_and_normalization": 2169856,
+    "parallel_residual_cnn": 1772928,
+    "joint_fusion": 345216,
+    "frame_residual_cnn": 1772928,
+    "frame_velocity_heads": 67760,
+    "event_fan_layers": 124928,
+    "event_temporal_cnn": 197376,
+    "event_heads": 46003,
+    "thresholds": 3
+  },
+  "tests": {
+    "v121_model": {"passed": 5, "skipped": 1, "seconds": 5.72},
+    "v121_pipeline": {"passed": 7, "seconds": 26.877},
+    "v12_model_and_pipeline_regression": {"passed": 12, "skipped": 1, "seconds": 27.424},
+    "shared_regressions": {
+      "passed": 56,
+      "seconds": 28.969,
+      "suites": ["test_v111_pipeline", "test_v11_avgf", "test_v11_sustain", "test_v11_playback", "test_loss_reporting", "test_app_overlap", "test_inference_overlap", "test_checkpoint_io", "ReadmeCommandsTest"]
+    },
+    "total_unique_passed": 80,
+    "total_unique_skipped": 2,
+    "cuda_note": "Optional CUDA tests were not requested; default-size execution, backward gradients and optimizer behavior were verified on CPU."
+  },
+  "data_addition": {
+    "bytes": 1997539801,
+    "new_training_recordings": 35,
+    "new_audio_hours": 3.092036125548,
+    "new_note_events": 115422,
+    "crc32_verified_files": 70,
+    "new_pair_training_loader_checks": 35,
+    "active_training_recordings": 95,
+    "active_training_hours": 7.466733979353306,
+    "validation_recordings": 16,
+    "test_recordings": 4,
+    "windows_per_epoch": 3040,
+    "batches_per_epoch_at_batch4": 760,
+    "report": "training-data-addition-v121-2026-10-17.json"
+  },
+  "limits": {
+    "long_training_launched": false,
+    "existing_checkpoints_modified": false,
+    "recognition_improvement_measured": false,
+    "epoch_speedup_measured": false
+  }
+}

@@ -3,11 +3,11 @@ import threading
 import unittest
 import wave
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
-from piano_ml.soundfont import PIANO_RELEASE_SECONDS, SampledPiano, sampled_piano_available
+from piano_ml.soundfont import PIANO_RELEASE_SECONDS, SampledPiano, _events, sampled_piano_available
 from piano_ml.synthesis import render_result_wav
 
 
@@ -40,6 +40,41 @@ class SoundfontTest(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_unmatched_note_release_is_harmless_but_other_failures_raise(self):
+        piano = SampledPiano.__new__(SampledPiano)
+        piano.synth, piano.lib = 1, Mock()
+        piano.lib.fluid_synth_noteoff.return_value = -1
+        piano.event("off", 95, 0)
+        piano.lib.fluid_synth_noteoff.assert_called_once_with(1, 0, 95)
+        for kind, function, key, value in (("on", "fluid_synth_noteon", 95, 80),
+                                            ("cc", "fluid_synth_cc", 64, 127)):
+            getattr(piano.lib, function).return_value = -1
+            with self.subTest(kind=kind), self.assertRaises(OSError):
+                piano.event(kind, key, value)
+        with self.assertRaises(ValueError):
+            piano.event("off", 128, 0)
+        with self.assertRaises(ValueError):
+            piano.event("unknown", 95, 0)
+        piano.synth = None
+        with self.assertRaises(OSError):
+            piano.event("off", 95, 0)
+
+    def test_same_pitch_duplicates_and_rounded_collisions_merge_without_early_release(self):
+        for second_start in (.1, .100001):
+            result = {"duration": 1, "notes": [
+                {"pitch": 95, "start": .1, "end": .5, "velocity": 80},
+                {"pitch": 95, "start": second_start, "end": .8, "velocity": 50}]}
+            events = [event for event in _events(result, 44100) if event[2] != "cc"]
+            self.assertEqual(events, [(4410, 3, "on", 95, 80), (35280, 2, "off", 95, 0)])
+
+    def test_adjacent_sample_repeated_strikes_release_before_next_onset(self):
+        result = {"duration": 1, "notes": [
+            {"pitch": 95, "start": .1, "end": .9, "velocity": 80},
+            {"pitch": 95, "start": 4411 / 44100, "end": .5, "velocity": 60}]}
+        events = [event for event in _events(result, 44100) if event[2] != "cc"]
+        self.assertEqual(events, [(4410, 3, "on", 95, 80), (4411, 2, "off", 95, 0),
+                                  (4411, 3, "on", 95, 60), (22050, 2, "off", 95, 0)])
 
     def test_stereo_events_repeated_keys_velocities_and_overlapping_pedal(self):
         result = {"duration": 1.4, "notes": [
@@ -83,6 +118,15 @@ class SoundfontTest(unittest.TestCase):
                 patch("piano_ml.synthesis.render_sampled_wav", return_value=output) as renderer:
             self.assertEqual(render_result_wav(result, output), output)
         self.assertEqual(renderer.call_args.args[2], 44100)
+
+    @unittest.skipUnless(sampled_piano_available(), "Download piano assets to run the real sample integration test")
+    def test_real_long_b6_release_renders_complete_non_silent_wav(self):
+        result = {"duration": 9, "notes": [{"pitch": 95, "start": 0, "end": 8, "velocity": 64}]}
+        output = render_result_wav(result, self.root / "held-b6.wav", engine="sampled")
+        with wave.open(str(output), "rb") as audio:
+            self.assertEqual(audio.getnframes(), round((9 + PIANO_RELEASE_SECONDS) * 44100))
+            self.assertGreater(np.max(np.abs(np.frombuffer(audio.readframes(44100), dtype="<i2").astype(float))), 0)
+        self.assertFalse(output.with_name(output.name + ".partial").exists())
 
     @unittest.skipUnless(sampled_piano_available(), "Download piano assets to run the real sample integration test")
     def test_real_piano_stereo_pitch_velocity_pedal_and_loud_chord(self):

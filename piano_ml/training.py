@@ -20,13 +20,24 @@ from .avgf import avgf_accumulators
 from .inference import get_device
 from .thresholds import Thresholds, saved_thresholds, threshold_grid, requested_grid
 from .model import (N_NOTES, LOW_NOTE, HIGH_NOTE, SAMPLE_RATE, HOP_LENGTH, build_model,
-                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE,
-                    FOUR_SCORE_ARCHITECTURES,
+                    model_config, DEFAULT_ARCHITECTURE, FOURIER_ARCHITECTURE, V9_ARCHITECTURE, V10_ARCHITECTURE, V101_ARCHITECTURE, V11_ARCHITECTURE,
+                    AVGF_ARCHITECTURES, V111_ARCHITECTURE, V12_ARCHITECTURE, V121_ARCHITECTURE, FIVE_SCORE_ARCHITECTURES,
                     BALANCED_ARCHITECTURES, RECURRENT_CONV_ARCHITECTURES,
                     MULTIRES_ARCHITECTURES, default_selection_metric, checkpoint_format_version)
 
 LOSS_COMPONENTS = ("frame", "onset", "offset", "release", "velocity", "pedal", "threshold")
 PITCH_EMPHASIS_VERSION = 2
+
+
+def make_lr_scheduler(optimizer, mode, patience=15, *, exact_epochs=True):
+    """Halve LR after the requested consecutive failures, matching checkpoint tolerance."""
+    if not isinstance(patience, int) or isinstance(patience, bool) or patience < 0:
+        raise ValueError("--lr-patience must be a nonnegative integer.")
+    # PyTorch reduces when num_bad_epochs > patience, hence the one-epoch adjustment.
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode=mode, factor=0.5,
+        patience=max(0, patience - 1) if exact_epochs else patience,
+        threshold=1e-6, threshold_mode="abs", min_lr=1e-6)
 
 
 class _FrameBCEAccumulator:
@@ -61,7 +72,16 @@ class _FrameBCEAccumulator:
 def save_checkpoint(payload: dict, path: Path) -> None:
     temporary = path.with_name(path.name + ".partial")
     torch.save(payload, temporary)
-    temporary.replace(path)
+    for attempt in range(5):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError as error:
+            # Windows scanners can briefly lock a completed checkpoint.
+            # Keep the old checkpoint intact and bound retries to 0.75 seconds.
+            if getattr(error, "winerror", None) not in (5, 32, 33) or attempt == 4:
+                raise
+            time.sleep(0.05 * 2 ** attempt)
 
 
 def rng_state() -> dict:
@@ -91,7 +111,7 @@ def score(model: nn.Module, loader: DataLoader, device: torch.device,
                               release_frames=model_config(model).get("release_frames", 2))
     avgf = avgf_accumulators(model, calibration.grid, avgf_temperature, avgf_regularization)
     if selection_metric == "avgf_loss" and not avgf:
-        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10, V10.1, V11, V11.1 or V12 model.")
     frame_loss = _FrameBCEAccumulator()
     with torch.inference_mode():
         for waves, labels in loader:
@@ -157,7 +177,7 @@ def training_loss_components(output, targets, positive_weight=5.0, event_weight=
     for key, scale in (("onset", 1.0), ("offset", offset_loss_weight)):
         components[key] = scale * pitch_bce(output[key], targets[key], event_positive)
     if release_loss_weight:
-        # Supervise activity just before and after actual key releases. This
+        # Supervise activity around the target note endings (V11 includes sustain). This
         # penalizes both premature endings and notes held past their reference.
         boundary = nn.functional.max_pool1d(targets["offset"].transpose(1, 2), 5, stride=1, padding=2).transpose(1, 2)
         if pitch_weights is not None:
@@ -172,6 +192,10 @@ def training_loss_components(output, targets, positive_weight=5.0, event_weight=
     components["velocity"] = 0.5 * velocity
     components["pedal"] = 0.2 * nn.functional.binary_cross_entropy_with_logits(
         output["pedal"], targets["pedal"], pos_weight=frame.new_tensor([2.0]))
+    for head in ("pedal_onset", "pedal_offset"):
+        if head in output:
+            components["pedal"] = components["pedal"] + 0.2 * nn.functional.binary_cross_entropy_with_logits(
+                output[head], targets[head], pos_weight=frame.new_tensor([event_weight]))
     return components
 
 
@@ -228,7 +252,7 @@ def train(args) -> None:
     if not resume and config["architecture"] != "frame":
         source_config = (initialization or {}).get("model_config", {})
         fourier = config["architecture"] == FOURIER_ARCHITECTURE
-        four_score = config["architecture"] in FOUR_SCORE_ARCHITECTURES
+        avgf_model = config["architecture"] in AVGF_ARCHITECTURES
         if fourier and initialization and source_config.get("architecture") != FOURIER_ARCHITECTURE:
             raise ValueError("Version 8 has a new structure. Start fresh, or use --init-from with another version 8 checkpoint.")
         if config["architecture"] == V9_ARCHITECTURE and initialization and source_config.get("architecture") != V9_ARCHITECTURE:
@@ -237,20 +261,43 @@ def train(args) -> None:
             raise ValueError("V10 uses harmonic CQT and long FFT branches; older model weights cannot transfer to this structure. Start fresh or initialize from a compatible V10 checkpoint.")
         if config["architecture"] == V101_ARCHITECTURE and initialization and source_config.get("architecture") != V101_ARCHITECTURE:
             raise ValueError("V10.1 uses short STFT and harmonic CQT branches; older model weights cannot transfer to this structure. Start fresh or initialize from a compatible V10.1 checkpoint.")
+        v11 = config["architecture"] in FIVE_SCORE_ARCHITECTURES
+        if config["architecture"] == V11_ARCHITECTURE and initialization and source_config.get("architecture") != V11_ARCHITECTURE:
+            raise ValueError("V11 uses long-context FAN, four-layer BiGRU and sustain-extended targets; start fresh or initialize from a compatible V11 checkpoint.")
+        if config["architecture"] == V111_ARCHITECTURE and initialization and source_config.get("architecture") != V111_ARCHITECTURE:
+            raise ValueError("V11.1 replaces FAN with a long STFT/CNN branch; start fresh or initialize from a compatible V11.1 checkpoint.")
+        v12 = config["architecture"] in (V12_ARCHITECTURE, V121_ARCHITECTURE)
+        v121 = config["architecture"] == V121_ARCHITECTURE
+        if v12 and initialization and source_config.get("architecture") != config["architecture"]:
+            label = "V12.1" if v121 else "V12"
+            raise ValueError(f"{label} has a different recurrent and convolutional structure; start fresh or initialize from a compatible {label} checkpoint.")
         v10 = config["architecture"] in (V10_ARCHITECTURE, V101_ARCHITECTURE)
-        config.update(hidden_size=getattr(args, "hidden_size", None) or source_config.get("hidden_size", 128 if v10 or not four_score else 192),
-                      gru_layers=getattr(args, "gru_layers", None) or source_config.get("gru_layers", 2),
-                      dropout=source_config.get("dropout", 0.2),
+        for name, default in (("hidden_size", 256 if v12 else 224 if v11 else 128 if v10 or not avgf_model else 192),
+                              ("gru_layers", 4 if v11 and not v12 else 2)):
+            value = getattr(args, name, None)
+            config[name] = source_config.get(name, default) if value is None else value
+        config.update(dropout=source_config.get("dropout", 0.2),
                       rnn_backend=getattr(args, "rnn_backend", "auto"))
         if config["architecture"] in RECURRENT_CONV_ARCHITECTURES:
             conv_steps = getattr(args, "conv_steps", None)
             config["conv_steps"] = source_config.get("conv_steps", 3) if conv_steps is None else conv_steps
         if config["architecture"] in MULTIRES_ARCHITECTURES:
-            spectral_option = ("short_fft", 2048) if config["architecture"] == V101_ARCHITECTURE else ("long_fft", 8192)
-            for name, default in (spectral_option, ("release_frames", 3)):
+            spectral_options = (("short_fft", 2048), ("long_fft", 8192)) if config["architecture"] in (V111_ARCHITECTURE, V12_ARCHITECTURE, V121_ARCHITECTURE) else (("short_fft", 2048), ("fan_window", 8192)) if v11 else (
+                (("short_fft", 2048),) if config["architecture"] == V101_ARCHITECTURE else (("long_fft", 8192),))
+            for name, default in (*spectral_options, ("release_frames", 3)):
                 value = getattr(args, name, None)
                 config[name] = source_config.get(name, default) if value is None else value
-        if four_score:
+            if v11:
+                config["note_duration"] = source_config.get("note_duration", "sustain_extended")
+                residual_blocks = getattr(args, "residual_blocks", None)
+                config["residual_blocks"] = source_config.get("residual_blocks", 1) if residual_blocks is None else residual_blocks
+                if not v12:
+                    config["pedal_hidden_size"] = source_config.get("pedal_hidden_size", 64)
+                else:
+                    for name, default in (("event_width", 256 if v121 else 768), ("event_fan_layers", 2)):
+                        value = getattr(args, name, None)
+                        config[name] = source_config.get(name, default) if value is None else value
+        if avgf_model:
             dimensions = [("feature_width", 200 if v10 else 384)]
             if fourier:
                 dimensions.extend((("fourier_modes", 9), ("fourier_layers", 2)))
@@ -259,12 +306,20 @@ def train(args) -> None:
                 config[name] = source_config.get(name, default) if value is None else value
     if not resume and getattr(args, "conv_steps", None) is not None and config["architecture"] not in RECURRENT_CONV_ARCHITECTURES:
         raise ValueError("--conv-steps requires --architecture onsets-recurrent.")
-    if getattr(args, "feature_width", None) is not None and config["architecture"] not in FOUR_SCORE_ARCHITECTURES:
-        raise ValueError("--feature-width requires a V8.1, V9, V10 or V10.1 architecture.")
-    if getattr(args, "short_fft", None) is not None and config["architecture"] != V101_ARCHITECTURE:
-        raise ValueError("--short-fft is specific to V10.1 (--architecture onsets-stft-cqt-harmonic-recurrent).")
+    if getattr(args, "feature_width", None) is not None and config["architecture"] not in AVGF_ARCHITECTURES:
+        raise ValueError("--feature-width requires a V8.1, V9, V10, V10.1, V11, V11.1 or V12 architecture.")
+    if getattr(args, "short_fft", None) is not None and config["architecture"] not in (V101_ARCHITECTURE, *FIVE_SCORE_ARCHITECTURES):
+        raise ValueError("--short-fft is specific to V10.1, V11, V11.1 and V12.")
     if getattr(args, "long_fft", None) is not None and config["architecture"] == V101_ARCHITECTURE:
         raise ValueError("V10.1 replaces the long FFT with CQT; use --short-fft for its STFT branch.")
+    if getattr(args, "long_fft", None) is not None and config["architecture"] == V11_ARCHITECTURE:
+        raise ValueError("V11 replaces the long FFT with FAN; use --fan-window (default 8192).")
+    if getattr(args, "fan_window", None) is not None and config["architecture"] != V11_ARCHITECTURE:
+        raise ValueError("--fan-window is specific to V11.")
+    if any(getattr(args, name, None) is not None for name in ("event_width", "event_fan_layers")) and config["architecture"] not in (V12_ARCHITECTURE, V121_ARCHITECTURE):
+        raise ValueError("--event-width and --event-fan-layers are specific to V12 and V12.1.")
+    if getattr(args, "residual_blocks", None) is not None and config["architecture"] not in FIVE_SCORE_ARCHITECTURES:
+        raise ValueError("--residual-blocks requires V11, V11.1 or V12.")
     if any(getattr(args, name, None) is not None for name in ("fourier_modes", "fourier_layers")) and config["architecture"] != FOURIER_ARCHITECTURE:
         raise ValueError("--fourier-modes and --fourier-layers are specific to V8.1 (--architecture onsets-fourier-recurrent); V9, V10 and V10.1 use residual CNN blocks.")
     device = get_device(args.device)
@@ -272,16 +327,21 @@ def train(args) -> None:
     if resume:
         model.load_state_dict(saved["model"])
     if init_from:
+        if config["architecture"] in (V12_ARCHITECTURE, V121_ARCHITECTURE):
+            expected, source_state = model.state_dict(), initialization["model"]
+            if expected.keys() != source_state.keys() or any(expected[key].shape != source_state[key].shape for key in expected):
+                label = "V12.1" if config["architecture"] == V121_ARCHITECTURE else "V12"
+                raise ValueError(f"{label} initialization requires matching model dimensions. Omit dimension overrides or start fresh.")
         complete_transfer = transfer_weights(model, initialization)
         print(f"Transferred {'complete recognizer' if complete_transfer else 'CNN features'} from {init_from}; "
               "optimizer and epoch start fresh", flush=True)
     architecture = config["architecture"]
-    four_score = architecture in FOUR_SCORE_ARCHITECTURES
+    avgf_model = architecture in AVGF_ARCHITECTURES
     balanced = architecture in BALANCED_ARCHITECTURES
     multires = architecture in MULTIRES_ARCHITECTURES
     learned = hasattr(model, "threshold_module")
     global_thresholds = learned and model.threshold_module.scope == "global"
-    suffix = f"-v{model.model_version}" if four_score else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
+    suffix = f"-v{model.model_version}" if avgf_model else "-v7" if balanced else "-v6" if multires else "-v5" if global_thresholds else "-v4" if architecture == "onsets-recurrent" else "-v3" if learned else "-v2" if architecture == "onsets" else ""
     output = Path(args.output or f"checkpoints/piano{suffix}.pt")
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -314,7 +374,7 @@ def train(args) -> None:
         "threshold_calibration", "validation" if multires and not balanced else "training")
     validation_calibration = calibration_mode == "validation"
     if balanced and validation_calibration:
-        raise ValueError("Versions 7/8/9/10/10.1 use gradient threshold learning; use --threshold-calibration training.")
+        raise ValueError("Versions 7/8/9/10/10.1/11/11.1 use gradient threshold learning; use --threshold-calibration training.")
     if validation_calibration:
         if not global_thresholds or thresholds_only or freeze_thresholds:
             raise ValueError("Validation threshold calibration requires three global thresholds in joint training, without --freeze-thresholds.")
@@ -360,15 +420,18 @@ def train(args) -> None:
         "positive_weight", 5.0 if architecture != "frame" else 20.0)
     event_weight = getattr(args, "event_weight", None)
     event_weight = prior.get("event_weight", 10.0) if event_weight is None else event_weight
+    target_options = ({"note_duration": "sustain_extended", "pedal_events": True}
+                      if architecture in FIVE_SCORE_ARCHITECTURES else {})
     train_set = MaestroWindows(args.data, "train", args.seconds, args.windows_per_file,
                                random_windows=True, max_files=args.max_files,
                                multi_target=True, augment=augment,
                                bass_sampling=training_options["bass_sampling"], bass_max_note=training_options["bass_max_note"],
                                treble_sampling=training_options["treble_sampling"], treble_min_note=training_options["treble_min_note"],
                                middle_sampling=training_options["middle_sampling"],
-                               middle_min_note=training_options["middle_min_note"], middle_max_note=training_options["middle_max_note"])
+                               middle_min_note=training_options["middle_min_note"], middle_max_note=training_options["middle_max_note"],
+                               **target_options)
     val_set = MaestroWindows(args.data, "validation", args.seconds, max(1, args.windows_per_file // 2),
-                             max_files=args.max_files, multi_target=True)
+                             max_files=args.max_files, multi_target=True, **target_options)
     loader_options = {"batch_size": args.batch_size, "num_workers": args.workers, "collate_fn": collate_windows}
     train_loader = DataLoader(train_set, shuffle=True, **loader_options)
     val_loader = DataLoader(val_set, **loader_options)
@@ -376,8 +439,8 @@ def train(args) -> None:
     if metric == "auto":
         metric = default_selection_metric(architecture)
     selection_mode = "min" if metric == "avgf_loss" else "max"
-    if metric == "avgf_loss" and not four_score:
-        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10 or V10.1 model.")
+    if metric == "avgf_loss" and not avgf_model:
+        raise ValueError("AvgF loss selection requires a V8/V8.1, V9, V10, V10.1, V11, V11.1 or V12 model.")
     if learned and any(getattr(args, name, None) is not None for name in (
             "thresholds", "frame_thresholds", "onset_thresholds", "offset_thresholds")):
         raise ValueError("The calibrated architecture learns its thresholds. Omit threshold grids while training.")
@@ -399,6 +462,9 @@ def train(args) -> None:
                                        "regularization": threshold_options["threshold_regularization"],
                                        "prior": model.threshold_module.prior.detach().cpu().tolist(),
                                        "aggregation": "all_validation_frames", "pitch_weights": "equal"}
+    if architecture in FIVE_SCORE_ARCHITECTURES:
+        validation_settings.update(note_duration="sustain_extended", pedal_events=True,
+                                   avgf_betas=list(model.threshold_module.betas))
     signature = hashlib.sha256(json.dumps(validation_settings, sort_keys=True).encode()).hexdigest()
     comparable = saved.get("validation_signature") == signature and output.exists()
     if resume and saved.get("selection_metric") != metric:
@@ -429,10 +495,25 @@ def train(args) -> None:
                     group["lr"] = args.lr
         if learned and getattr(args, "threshold_lr", None) is not None:
             optimizer.param_groups[1]["lr"] = args.threshold_lr
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=selection_mode, factor=0.5,
-        patience=getattr(args, "lr_patience", 3), min_lr=1e-6)
-    if restoring_optimizer and comparable and "scheduler" in saved:
-        scheduler.load_state_dict(saved["scheduler"])
+    requested_patience = getattr(args, "lr_patience", None)
+    lr_patience = requested_patience if requested_patience is not None else (15 if architecture in (V111_ARCHITECTURE, V12_ARCHITECTURE, V121_ARCHITECTURE) else 3)
+    scheduler = make_lr_scheduler(optimizer, selection_mode, lr_patience)
+    if restoring_optimizer and "scheduler" in saved:
+        previous_scheduler = saved["scheduler"]
+        if comparable:
+            scheduler.load_state_dict(previous_scheduler)
+        else:
+            # New validation targets reset progress, while retaining the saved LR policy.
+            for name in ("factor", "patience", "threshold", "threshold_mode", "cooldown", "min_lrs", "eps"):
+                if name in previous_scheduler:
+                    setattr(scheduler, name, previous_scheduler[name])
+        if requested_patience is None:
+            lr_patience = prior.get("lr_patience", scheduler.patience + 1)
+        else:
+            # Apply explicit overrides after restore, retaining accumulated bad epochs.
+            scheduler.patience = max(0, requested_patience - 1)
+            scheduler.threshold = 1e-6
+            scheduler.threshold_mode = "abs"
     if "rng" in saved:
         restore_rng(saved["rng"], device)
     start_epoch = int(saved.get("epoch", 0))
@@ -441,6 +522,8 @@ def train(args) -> None:
     best_score = float(saved.get("best_score", fallback_best)) if comparable else initial_best
     best_f1 = float(saved.get("best_f1", -1)) if comparable else -1.0
     stale = int(saved.get("stale_epochs", 0)) if comparable else 0
+    if not (restoring_optimizer and comparable and "scheduler" in saved) or requested_patience is not None:
+        scheduler.best = best_score
     if getattr(args, "reset_early_stopping", False):
         stale = 0
         scheduler.num_bad_epochs = 0
@@ -459,16 +542,22 @@ def train(args) -> None:
                 "training_config": {"augment": augment, "positive_weight": positive_weight,
                     "event_weight": event_weight, "threshold_grid": [] if learned else [values.to_dict() for values in grid],
                     "thresholds_only": thresholds_only, "freeze_thresholds": freeze_thresholds, **threshold_options,
-                    "threshold_objective": "pitch_f0123" if four_score else "pitch_f03" if balanced else "f1",
+                    "threshold_objective": "pitch_f12345" if architecture in FIVE_SCORE_ARCHITECTURES else "pitch_f0123" if avgf_model else "pitch_f03" if balanced else "f1",
                     "seconds": args.seconds, "windows_per_file": args.windows_per_file, "seed": seed,
                     "early_stopping": False, "patience": 0, "threshold_calibration": calibration_mode,
+                    "lr_patience": lr_patience, "lr_patience_semantics": "consecutive_epochs",
+                    "lr_min_improvement": scheduler.threshold, "lr_threshold_mode": scheduler.threshold_mode,
                     "calibration_values": calibration_values, "calibration_every": calibration_every,
                     "pitch_emphasis_version": PITCH_EMPHASIS_VERSION, **training_options}}
         if training_metrics is not None:
             payload["training_metrics"] = training_metrics
-        if four_score:
+        if avgf_model:
             payload["model_version"] = model.model_version
             payload["training_config"]["model_version"] = model.model_version
+        if architecture in FIVE_SCORE_ARCHITECTURES:
+            payload["note_duration"] = "sustain_extended"
+            payload["avgf_betas"] = list(model.threshold_module.betas)
+            payload["training_config"].update(**target_options, avgf_betas=list(model.threshold_module.betas))
         return payload
 
     def validation_score(epoch=None):
@@ -487,7 +576,7 @@ def train(args) -> None:
         metrics = score(model, val_loader, device, selection_metric=metric,
                         min_note_seconds=minimum, threshold_configs=candidates,
                         **({"avgf_temperature": threshold_options["threshold_temperature"],
-                            "avgf_regularization": threshold_options["threshold_regularization"]} if four_score else {}))
+                            "avgf_regularization": threshold_options["threshold_regularization"]} if avgf_model else {}))
         if validation_calibration and saved_thresholds(metrics) != current:
             model.threshold_module.initialize(saved_thresholds(metrics))
         metrics.update(calibration_search=search,
@@ -499,10 +588,12 @@ def train(args) -> None:
         print(f"Restored {architecture} model at epoch {start_epoch}; optimizer={'restored' if restoring_optimizer else 'fresh'}", flush=True)
     elif not init_from:
         print(f"Fresh random initialization; seed={seed}; starting at epoch 1", flush=True)
-    version_label = f"V{model.model_version} " if four_score else ""
+    version_label = f"V{model.model_version} " if avgf_model else ""
     print(f"Training {version_label}{architecture} ({sum(p.numel() for p in model.parameters()):,} parameters) on "
           f"{len(train_set.records)} recordings; validating on {len(val_set.records)}; device={device}; "
           f"selection={metric}; epochs={args.epochs}; early_stopping=disabled; augmentation={augment}", flush=True)
+    print(f"LR halves after {max(1, scheduler.patience + 1)} consecutive non-improving epochs; "
+          f"improvement_tolerance={scheduler.threshold:g} ({scheduler.threshold_mode}); minimum_lr=1e-6", flush=True)
     print((f"Calibrating three global threshold parameters on decoded validation {metric} every {calibration_every} epochs; validating current thresholds every epoch" if validation_calibration else
            "Keeping learned threshold parameters fixed for this run" if freeze_thresholds else
            f"Learning {model.threshold_module.raw.numel()} {'global' if global_thresholds else 'register'} thresholds on training targets")
@@ -523,15 +614,19 @@ def train(args) -> None:
                                                for name, default in pitch_emphasis_defaults.items()):
         print("Cleared saved pitch emphasis; explicit CLI pitch controls override the equal-note defaults", flush=True)
     if balanced:
-        threshold_scores = "F0,F1,F2,F3" if four_score else "F0,F3"
+        threshold_scores = ",".join(f"F{beta}" for beta in model.threshold_module.betas)
         weight_summary = ("Equal error weights for all 88 piano keys; " if pitch_weights is None else
                           f"Bass/treble error weight={training_options['edge_loss_weight']:g}; "
                           f"middle error weight={training_options['middle_loss_weight']:g}; ")
         print(weight_summary +
-              f"threshold objective=smooth per-pitch mean({threshold_scores}); validation uses decoded notes", flush=True)
+              f"threshold objective=smooth per-pitch mean({threshold_scores}); "
+              + ("selection uses validation AvgF loss; decoded note scores reported separately"
+                 if metric == "avgf_loss" else "validation uses decoded notes"), flush=True)
     if not comparable and (resume or init_from and complete_transfer):
         initial_metrics = validation_score()
         best_score, best_f1 = initial_metrics[metric], initial_metrics["f1"]
+        scheduler.best = best_score
+        scheduler.num_bad_epochs = 0
         save_checkpoint(checkpoint_payload(start_epoch, initial_metrics), output)
         print(f"Saved starting model for comparison: {metric}={best_score:.4f}; "
               "best checkpoint will change only on validation improvement", flush=True)
@@ -583,11 +678,12 @@ def train(args) -> None:
                "train_loss_components": training_metrics["loss_components"], "validation": metrics,
                "lr": optimizer.param_groups[0]["lr"], "selection_metric": metric, "selection_mode": selection_mode, "seed": seed,
                "best_score": best_score, "stale_epochs": stale, "early_stopping": False, "patience": 0,
+               "lr_patience": lr_patience, "lr_bad_epochs": scheduler.num_bad_epochs,
                "train_seconds": train_seconds, "validation_seconds": metrics["validation_seconds"],
                "epoch_seconds": time.perf_counter() - epoch_started,
                "calibration_search": metrics["calibration_search"],
                "calibration_candidates": metrics["calibration_candidates"]}
-        if four_score:
+        if avgf_model:
             log["model_version"] = model.model_version
         if learned:
             log.update(threshold_loss=averages[1],
@@ -595,13 +691,19 @@ def train(args) -> None:
         summary = chosen.summary()
         pitch_summary = (f"note_macro_f1={metrics['note_macro_f1']:.4f} "
                          f"covered_pitches={metrics['note_macro_pitch_count']}/{N_NOTES} ") if "note_macro_f1" in metrics else ""
-        if balanced and "note_macro_f03" in metrics:
+        if balanced and architecture not in FIVE_SCORE_ARCHITECTURES and "note_macro_f03" in metrics:
             pitch_summary += (f"note_macro_f0={metrics['note_macro_f0']:.4f} "
                               f"note_macro_f3={metrics['note_macro_f3']:.4f} "
                               f"note_macro_f03={metrics['note_macro_f03']:.4f} ")
-        if four_score and "note_macro_f0123" in metrics:
+        if avgf_model and architecture not in FIVE_SCORE_ARCHITECTURES and "note_macro_f0123" in metrics:
             pitch_summary += (f"note_macro_f2={metrics['note_macro_f2']:.4f} "
                               f"note_macro_f0123={metrics['note_macro_f0123']:.4f} ")
+        if architecture in FIVE_SCORE_ARCHITECTURES and "note_macro_f12345" in metrics:
+            pitch_summary += (f"note_macro_f2={metrics['note_macro_f2']:.4f} "
+                              f"note_macro_f3={metrics['note_macro_f3']:.4f} "
+                              f"note_macro_f4={metrics['note_macro_f4']:.4f} "
+                              f"note_macro_f5={metrics['note_macro_f5']:.4f} "
+                              f"note_macro_f12345={metrics['note_macro_f12345']:.4f} ")
         threshold_digits = 6 if balanced else 2
         component_summary = " ".join(f"{name}={value:.4f}" for name, value in log["train_loss_components"].items())
         avgf_summary = f"val_avgf_loss={metrics['avgf_loss']:.6f} " if "avgf_loss" in metrics else ""

@@ -90,13 +90,23 @@ class SampledPiano:
             raise
 
     def event(self, kind: str, key: int, value: int) -> None:
+        if not self.synth:
+            raise OSError("The piano synthesizer is closed.")
+        if kind not in ("on", "off", "cc"):
+            raise ValueError(f"Unknown piano event: {kind}")
+        if not 0 <= key <= 127 or not 0 <= value <= 127:
+            raise ValueError("Piano MIDI keys and values must be between 0 and 127.")
         if kind == "on":
             status = self.lib.fluid_synth_noteon(self.synth, 0, key, value)
         elif kind == "off":
             status = self.lib.fluid_synth_noteoff(self.synth, 0, key)
         else:
             status = self.lib.fluid_synth_cc(self.synth, 0, key, value)
-        if status != 0:
+        # FLUID_FAILED (-1) also means there is no matching voice to release.
+        # Samples may finish naturally, or be stolen at the polyphony limit,
+        # before their scheduled note-off. Releasing that key is still complete.
+        # https://www.fluidsynth.org/api/group__midi__messages.html
+        if status != 0 and not (kind == "off" and status == -1):
             raise OSError(f"Piano event failed: {kind} {key}")
 
     def render(self, frames: int) -> np.ndarray:
@@ -129,19 +139,29 @@ def _events(result: dict, sample_rate: int) -> list[tuple]:
     """Sample-timed MIDI events; release old strikes before repeating a key."""
     events = []
     duration = float(result["duration"])
-    next_start = {}
-    for note in sorted(result["notes"], key=lambda value: value["start"], reverse=True):
+    strikes = {}
+    for note in result["notes"]:
         pitch = int(note["pitch"])
-        end = min(note["end"], next_start.get(pitch, duration))
-        next_start[pitch] = note["start"]
-        # Keep sub-sample notes valid, and avoid note-offs preceding their strike.
-        start_frame = round(note["start"] * sample_rate)
-        end_frame = max(start_frame + 1, round(end * sample_rate))
-        events.append((start_frame, 3, "on", pitch, int(note.get("velocity", 100))))
-        events.append((end_frame, 2, "off", pitch, 0))
-    # Union overlapping sustain intervals before sending CC64 events.
+        start = round(note["start"] * sample_rate)
+        end = max(start + 1, round(note["end"] * sample_rate))
+        velocity = int(note.get("velocity", 100))
+        # One MIDI channel cannot play two independent voices of the same key.
+        # Merge strikes that become identical on the output sample grid.
+        previous = strikes.get((start, pitch))
+        if previous is not None:
+            end, velocity = max(end, previous[0]), max(velocity, previous[1])
+        strikes[start, pitch] = (end, velocity)
+    next_start = {}
+    for (start, pitch), (end, velocity) in sorted(strikes.items(), reverse=True):
+        end = min(end, next_start.get(pitch, max(start + 1, round(duration * sample_rate))))
+        next_start[pitch] = start
+        events.append((start, 3, "on", pitch, velocity))
+        events.append((end, 2, "off", pitch, 0))
+    # Sustained note ends already encode the pedal hold. Sending CC64 again
+    # would extend them beyond their predicted ends when the heads disagree.
     pedals = []
-    for interval in sorted(result.get("pedals", []), key=lambda value: value["start"]):
+    intervals = result.get("pedals", []) if result.get("note_duration") != "sustain_extended" else []
+    for interval in sorted(intervals, key=lambda value: value["start"]):
         if pedals and interval["start"] <= pedals[-1][1]:
             pedals[-1][1] = max(pedals[-1][1], interval["end"])
         else:

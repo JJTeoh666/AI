@@ -12,7 +12,7 @@ from scipy.signal import resample_poly
 from torch.utils.data import Dataset
 from torch.utils.data._utils.collate import default_collate
 
-from .midi import read_performance
+from .midi import extend_sustain_notes, merge_pedal_intervals, read_performance
 from .model import HOP_LENGTH, LOW_NOTE, N_NOTES, SAMPLE_RATE
 from .middle_data import read_training_exclusions, FOCUS_LOW_NOTE, FOCUS_HIGH_NOTE
 
@@ -62,7 +62,8 @@ class MaestroWindows(Dataset):
                  augment: bool = False, bass_sampling: float = 0.0,
                  bass_max_note: int = 47, treble_sampling: float = 0.0,
                  treble_min_note: int = 84, middle_sampling: float = 0.0,
-                 middle_min_note: int = FOCUS_LOW_NOTE, middle_max_note: int = FOCUS_HIGH_NOTE) -> None:
+                 middle_min_note: int = FOCUS_LOW_NOTE, middle_max_note: int = FOCUS_HIGH_NOTE,
+                 note_duration: str = "key_release", pedal_events: bool = False) -> None:
         if seconds <= 0 or windows_per_file < 1:
             raise ValueError("Window duration and windows per file must be positive.")
         self.root = Path(root)
@@ -74,7 +75,12 @@ class MaestroWindows(Dataset):
         self.random_windows = random_windows
         self.multi_target = multi_target
         self.augment = augment
+        if note_duration not in ("key_release", "sustain_extended"):
+            raise ValueError("Note duration must be 'key_release' or 'sustain_extended'.")
+        self.note_duration = note_duration
+        self.pedal_events = pedal_events
         self._performances: dict[str, tuple] = {}
+        self._target_performances: dict[str, tuple] = {}
         if any(not math.isfinite(value) or not 0 <= value <= 1 for value in (bass_sampling, treble_sampling, middle_sampling)):
             raise ValueError("Pitch sampling fractions must be between zero and one.")
         if bass_sampling + treble_sampling + middle_sampling > 1:
@@ -123,6 +129,16 @@ class MaestroWindows(Dataset):
     def __len__(self) -> int:
         return len(self.records) * self.windows_per_file
 
+    def _target_performance(self, midi_name: str):
+        if midi_name not in self._performances:
+            self._performances[midi_name] = read_performance(self.root / midi_name)
+        if midi_name not in self._target_performances:
+            notes, pedals = self._performances[midi_name]
+            target_notes = extend_sustain_notes(notes, pedals) if self.note_duration == "sustain_extended" else notes
+            target_pedals = merge_pedal_intervals(pedals) if self.pedal_events else pedals
+            self._target_performances[midi_name] = target_notes, target_pedals
+        return self._target_performances[midi_name]
+
     def __getitem__(self, index: int):
         row = self.records[index // self.windows_per_file]
         anchor = None
@@ -151,9 +167,7 @@ class MaestroWindows(Dataset):
         if self.augment:
             wave_data = augment_audio(wave_data)
         midi_name = row["midi_filename"]
-        if midi_name not in self._performances:
-            self._performances[midi_name] = read_performance(self.root / midi_name)
-        notes, pedals = self._performances[midi_name]
+        notes, pedals = self._target_performance(midi_name)
         n_frames = len(wave_data) // HOP_LENGTH + 1
         frame_times = start + np.arange(n_frames) * HOP_LENGTH / SAMPLE_RATE
         labels = np.zeros((n_frames, N_NOTES), dtype=np.float32)
@@ -180,9 +194,17 @@ class MaestroWindows(Dataset):
             return wave_data, labels
         targets["frame"] = labels
         targets["pedal"] = np.zeros((n_frames, 1), np.float32)
+        if self.pedal_events:
+            targets["pedal_onset"] = np.zeros((n_frames, 1), np.float32)
+            targets["pedal_offset"] = np.zeros((n_frames, 1), np.float32)
         for pedal in pedals:
             targets["pedal"][:, 0] = np.maximum(targets["pedal"][:, 0],
                 (frame_times >= pedal.start) & (frame_times < pedal.end))
+            if self.pedal_events:
+                for key, time in (("pedal_onset", pedal.start), ("pedal_offset", pedal.end)):
+                    if start <= time < start + self.seconds:
+                        first = min(n_frames - 1, round((time - start) * SAMPLE_RATE / HOP_LENGTH))
+                        targets[key][first:first + 2, 0] = 1
         targets["reference_notes"] = reference
         return wave_data, targets
 

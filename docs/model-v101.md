@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Training and resume command table](../README.md#training-commands) · [V10 reference](model-v10.md)
 
-V10.1 is `onsets-stft-cqt-harmonic-recurrent`, with **3,054,988 trainable parameters** at default settings. It becomes the default for fresh auto training. Model version is `10.1`; checkpoint format version is `12`. Resume restores the saved architecture, and explicit V10/V9/V8.1 commands remain available in the README table.
+V10.1 is `onsets-stft-cqt-harmonic-recurrent`, with **3,054,988 trainable parameters** at default settings. Fresh auto training now selects V12.1; use the explicit V10.1 architecture flag for this version. Model version is `10.1`; checkpoint format version is `12`. Resume restores the saved architecture, and explicit V10/V9/V8.1 commands remain available in the README table.
 
 ## Structure
 
@@ -73,7 +73,7 @@ New files are `piano-v10.1.pt`, `piano-v10.1.last.pt` and `piano-v10.1.history.j
 
 V10 retains **3,035,788 parameters** and its original model configuration/state keys. V9 and V8.1 retain **10,168,060** and **10,012,924** parameters. Their explicit start/resume commands are preserved. All README shell commands are now in tables; the training table includes V10.1 through the frame baseline, and retains the previous V8 continuation command.
 
-The desktop app, CLI and local Python web app can use V10.1 `.pt` checkpoints, with the existing overlap methods, score, Basic Pitch comparison and playback controls. The browser-only Site/exporter remains limited to V8.1/V9.
+The desktop app, CLI and local Python web app can use V10.1 `.pt` checkpoints, with the existing overlap methods, score, ByteDance comparison and playback controls. The browser-only Site/exporter remains limited to V8.1/V9.
 
 ## Verification
 
